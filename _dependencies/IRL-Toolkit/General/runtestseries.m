@@ -9,7 +9,7 @@ K = length(algorithms);
 R = restarts;
 temp_result = cell(R,1);
 series_result = cell(N,K,R);
-matlabpool;
+parpool;
 parfor r=1:R,
     temp_result{r} = cell(N,K);
     for a=1:length(algorithms),
