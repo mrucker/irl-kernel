@@ -1,5 +1,5 @@
 % Run IRL test with specified algorithm and example.
-function test_result = runtest(algorithm,algorithm_params, mdp_model,mdp,mdp_params,test_params)
+function test_result = runtest(algorithm,algorithm_params, mdp_model, mdp,mdp_params,test_params)
 
 % test_result - structure that contains results of the test:
 %   see evaluateirl.m
