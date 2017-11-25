@@ -1,4 +1,5 @@
-addpath(genpath(fullfile(fileparts(which(mfilename)),'../_dependencies/')));
+add_ourpaths;
+
 %close all; clear; clc;
 global l1;
 global epsilon
@@ -7,8 +8,8 @@ l1 = 1;
 epsilon = 0.01;
 lambda = 1;
 
-algorithm        = 'firl';
-%algorithm        = 'gpirl';
+%algorithm        = 'firl';
+algorithm        = 'algorithm1';
 algorithm_params = struct();
 mdp_model        = 'linearmdp';
 mdp              = 'gridworld';
