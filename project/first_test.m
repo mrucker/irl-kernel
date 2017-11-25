@@ -1,5 +1,5 @@
 addpath(genpath(fullfile(fileparts(which(mfilename)),'../_dependencies/')));
-close all; clear; clc;
+%close all; clear; clc;
 global l1;
 global epsilon
 global lambda
@@ -8,6 +8,7 @@ epsilon = 0.01;
 lambda = 1;
 
 algorithm        = 'firl';
+%algorithm        = 'gpirl';
 algorithm_params = struct();
 mdp_model        = 'linearmdp';
 mdp              = 'gridworld';
@@ -18,4 +19,4 @@ test_result = runtest(algorithm, algorithm_params, mdp_model, mdp, mdp_params, t
 
 % Visualize solution.
 printresult(test_result);
-visualize(test_result);
+visualize(test_result, 1);
