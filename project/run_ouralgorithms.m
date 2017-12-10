@@ -1,4 +1,4 @@
-add_ourpaths;
+add_ourpaths; %includes all the paths required to run our code
 
 %close all; clear; clc;
 global l1;
@@ -9,7 +9,7 @@ epsilon = 0.01;
 lambda = 1;
 
 %algorithm        = 'firl';
-algorithm        = 'algorithm1';
+algorithm        = 'an';
 algorithm_params = struct();
 mdp_model        = 'linearmdp';
 mdp              = 'gridworld';

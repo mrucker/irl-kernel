@@ -2,4 +2,5 @@
 addpath(genpath(fullfile(fileparts(which(mfilename)),'../_dependencies/')));
 
 % Our Algorithms
-addpath('algorithm1');
+addpath('algorithm1'); 
+addpath('algorithm2');
