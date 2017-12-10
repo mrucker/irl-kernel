@@ -9,7 +9,8 @@ epsilon = 0.01;
 lambda = 1;
 
 %algorithm        = 'firl';
-algorithm        = 'an';
+%algorithm        = 'an';
+algorithm        = 'algorithm2';
 algorithm_params = struct();
 mdp_model        = 'linearmdp';
 mdp              = 'gridworld';

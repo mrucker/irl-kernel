@@ -102,7 +102,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    [~,idx] = max(policyMixing(mE, ms, verbosity));
+    [~,idx] = max(mixPolicies(mE, ms, verbosity));
 
     time = toc;
 
@@ -114,7 +114,7 @@ function [w,t] = maxMarginOptimization(mE, ms)
     t = 0;
 end
 
-function [lambda] = policyMixing(mE, ms, verbosity)
+function [lambda] = mixPolicies(mE, ms, verbosity)
 
     f_cnt = size(ms{1},1);
     m_cnt = size(ms,2);
@@ -141,7 +141,7 @@ function [lambda] = policyMixing(mE, ms, verbosity)
             ones(m_cnt,1)'*l == 1;
     cvx_end
     
-    lambda = lm;
+    lambda = l;
 end
 
 function irl_result = marshallResults(r, w, mdp_model, mdp_data, time)
