@@ -5,8 +5,8 @@ close all; clear; clc;
 algorithm_params = struct();
 mdp_model        = 'linearmdp';
 mdp              = 'gridworld';
-mdp_params       = struct('n',32,'determinism',1,'seed', sum(100*clock), 'b',4, 'discount',0.9);
-test_params      = struct('training_sample_lengths', 32, 'training_samples', 512, 'verbosity',2);
+mdp_params       = struct('n',4,'determinism',1,'seed', sum(100*clock), 'b',4, 'discount',0.9);
+test_params      = struct('training_sample_lengths', 128, 'training_samples', 512, 'verbosity',2);
 verbosity        = test_params.verbosity;
 
 [mdp_data,r,feature_data,true_feature_map] = feval(strcat(mdp,'build'),mdp_params);
@@ -21,3 +21,4 @@ else
 end
 
 irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, feature_data, example_samples, true_feature_map, verbosity);
+

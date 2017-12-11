@@ -40,9 +40,12 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
         F = eye(states);
     end
 
-    % Count features.
+    F = eye(states);
+    
+    % Count features.    
     features = size(F,2);
     F = F';
+    
 
     % Construct state expectations.
     mE   = zeros(features,1);    
@@ -53,10 +56,11 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
         end
     end
     
-    mE = mE/(N*T); %not exactly what the paper does but I think it works and matches our code library. I think the paper would just divide by N.
+    mE = mE/N;
 
     % Step 1
     rand_w = rand(features,1);
+    rand_w = rand_w/norm(rand_w); %not important to the algorithm, but this allows for comparisons against future w's.
     rand_r = repmat(F'*rand_w, 1, actions);
     rand_p = standardmdpsolve(mdp_data, rand_r);
     rand_m = F*standardmdpfrequency(mdp_data, rand_p);
@@ -65,15 +69,16 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     ps = {rand_p};
     ws = {rand_w};
     ms = {rand_m};
+    ts = {0};
 
     i = 2;
 
     while 1
         %Step 2
-        [ws{i}, t] = maxMarginOptimization(mE, ms);
+        [ws{i}, ts{i}] = maxMarginOptimization(mE, ms, verbosity);
 
         %Step 3
-        if (abs(t) <= algorithm_params.epsilon)
+        if (ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon)
             break;
         end
 
@@ -89,7 +94,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
 
         % Print t.
         if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration, t=%f\n',t);
+            fprintf(1,'Completed IRL iteration, t=%f\n',ts{i-1});
         end
     end
 
@@ -105,13 +110,32 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     [~,idx] = max(mixPolicies(mE, ms, verbosity));
 
     time = toc;
+    
+    idx = i;
 
     irl_result = marshallResults(rs{idx}, ws{idx}, mdp_model, mdp_data, time);
 end
 
-function [w,t] = maxMarginOptimization(mE, ms)
-    w = mE;
-    t = 0;
+function [w,t] = maxMarginOptimization(mE, ms, verbosity)    
+    f_cnt = size(ms{1},1);
+    m_cnt = size(ms,2);
+    
+    % Construct matrix.
+    m_mat = zeros(f_cnt,m_cnt);
+    for j=1:m_cnt
+        m_mat(:,j) = ms{j};
+    end
+    
+    warning('off','all')
+    cvx_begin
+        cvx_quiet(true); %this makes the convergence of t more obvious
+        variables t w(f_cnt);
+        maximize(t);
+        subject to
+            1 >= norm(w,1);
+            0 <= w'*mE - w'*m_mat - t ;
+    cvx_end
+    warning('off','all')    
 end
 
 function [lambda] = mixPolicies(mE, ms, verbosity)
