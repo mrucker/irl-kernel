@@ -31,21 +31,17 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     % Build feature membership matrix.
     if algorithm_params.all_features
         F = feature_data.splittable;
-        % Note that we add a row of 1s to the feature matrix to ensure that we
-        % can control the reward at every state.
-        F = horzcat(F,ones(states,1));
+        F = horzcat(F,ones(states,1)); %We add a row of 1s to the feature matrix to ensure we can control the reward at every state
     elseif algorithm_params.true_features
         F = true_features;
     else
         F = eye(states);
     end
 
-    F = eye(states);
-    
-    % Count features.    
+    % Count features.
     features = size(F,2);
     F = F';
-    
+
 
     % Construct state expectations.
     mE   = zeros(features,1);    
@@ -69,16 +65,24 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     ps = {rand_p};
     ws = {rand_w};
     ms = {rand_m};
-    ts = {0};
+    ts = {0};    
 
     i = 2;
 
-    while 1
+    while 1        
+        
         %Step 2
-        [ws{i}, ts{i}] = maxMarginOptimization(mE, ms, verbosity);
-
+        %[w2, t2] = maxMarginOptimization_3_b(mE, ms, verbosity);
+        [ws{i}, ts{i}] = maxMarginOptimization_1_a(mE, ms, verbosity);
+        
+        % Print t.
+        if verbosity ~= 0
+            fprintf(1,'Completed IRL iteration, t1=%f\n',ts{i});
+         %   fprintf(1,'Completed IRL iteration, t2=%f\n',t2);
+        end
+        
         %Step 3
-        if (ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon)
+        if (ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || ts{i} > 1000)
             break;
         end
 
@@ -91,11 +95,6 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
 
         %Step 6
         i = i+1;
-
-        % Print t.
-        if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration, t=%f\n',ts{i-1});
-        end
     end
 
     % Compute mu for last policy    
@@ -116,8 +115,38 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     irl_result = marshallResults(rs{idx}, ws{idx}, mdp_model, mdp_data, time);
 end
 
-function [w,t] = maxMarginOptimization(mE, ms, verbosity)    
-    f_cnt = size(ms{1},1);
+%a version of the hard-margin SVM where the margin is directly optimized
+function [w,t] = maxMarginOptimization_1_a(mE, ms, verbosity)
+    f_cnt = size(mE,1);
+    m_cnt = size(ms,2);
+    
+    % Construct matrix.
+    m_mat = zeros(f_cnt,m_cnt);
+    for j=1:m_cnt
+        m_mat(:,j) = ms{j};
+    end
+    
+    k = @(x1,x2) pow_pos(x1'*x2 + 1, 2);
+    
+    warning('off','all')
+    cvx_begin
+        if verbosity == 2
+            cvx_quiet(false);
+        else
+            cvx_quiet(true);
+        end
+        variables t w(f_cnt);
+        maximize(t);
+        subject to
+            1 >= k(w,w);
+            t <= k(w,mE) - k(w,m_mat);
+    cvx_end
+    warning('off','all')
+end
+
+%can't get it to work with a polynomial kernel
+function [w,t] = maxMarginOptimization_1_b(mE, ms, verbosity)
+    f_cnt = size(mE,1);
     m_cnt = size(ms,2);
     
     % Construct matrix.
@@ -128,14 +157,132 @@ function [w,t] = maxMarginOptimization(mE, ms, verbosity)
     
     warning('off','all')
     cvx_begin
-        cvx_quiet(true); %this makes the convergence of t more obvious
+        if verbosity == 2
+            cvx_quiet(false);
+        else
+            cvx_quiet(true);
+        end
         variables t w(f_cnt);
         maximize(t);
         subject to
-            1 >= norm(w,1);
-            0 <= w'*mE - w'*m_mat - t ;
+            1 >= power_pos(w'*w+1,2);
+            t <= w'*mE - w'*m_mat;
     cvx_end
-    warning('off','all')    
+    warning('off','all')
+end
+
+%standard version soft-max which allowing some error in the decision boundary 
+function [w,t] = maxMarginOptimization_2_a(mE, ms, verbosity)
+    f_cnt = size(ms{1},1);
+    m_cnt = size(ms,2);
+    
+    % Construct matrix.
+    m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
+    for j=1:m_cnt
+        m_mat(:,j+1) = ms{j};
+    end
+    
+    y = vertcat(1,-ones(m_cnt,1));
+    
+    warning('off','all')
+    cvx_begin
+        if verbosity == 2
+            cvx_quiet(false);
+        else
+            cvx_quiet(true);
+        end
+        variables w_0 w(f_cnt) zeta(m_cnt+1);
+        minimize(norm(w,2) + 100*sum(zeta));
+        subject to
+            1 <= y.*(m_mat'*w + w_0) + zeta;
+            0 <= zeta;
+    cvx_end
+    warning('off','all')
+    
+    t = 2*(1/norm(w)); % we multiply by two to get both margins.
+end
+
+%another version of soft-max using the hinge-loss objective. 
+function [w,t] = maxMarginOptimization_3_a(mE, ms, verbosity)
+    f_cnt = size(ms{1},1);
+    m_cnt = size(ms,2);
+    
+    % Construct matrix.
+    m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
+    for j=1:m_cnt
+        m_mat(:,j+1) = ms{j};
+    end
+    
+    y = vertcat(1,-ones(m_cnt,1));
+    
+    warning('off','all')
+    cvx_begin
+        if verbosity == 2
+            cvx_quiet(false);
+        else
+            cvx_quiet(true);
+        end
+        variables w_0 w(f_cnt);
+        minimize( 100*sum(max(0,1-y.*( m_mat'*w + w_0))) + norm(w,2))
+    cvx_end
+    warning('off','all')
+    
+    t = 2*(1/norm(w)); % we multiply by two to get both margins.
+end
+
+function [w,t] = maxMarginOptimization_3_b(mE, ms, verbosity)
+    f_cnt = size(ms{1},1);
+    m_cnt = size(ms,2);
+    
+    % Construct matrix.
+    m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
+    for j=1:m_cnt
+        m_mat(:,j+1) = ms{j};
+    end
+    
+    m_mat = vertcat(m_mat, ones(1,m_cnt+1));
+    
+    y = vertcat(1,-ones(m_cnt,1));
+    
+    warning('off','all')
+    cvx_begin
+        if verbosity == 2
+            cvx_quiet(false);
+        else
+            cvx_quiet(true);
+        end
+        variables w(f_cnt+1);
+        minimize( 100*sum(max(0,1-y.*( m_mat'*w))) + w(1:end-1,1)'*w(1:end-1,1))
+    cvx_end
+    warning('off','all')
+    
+    
+    w = w(1:end-1,1);
+    t = 2*(1/norm(w)); % we multiply by two to get both margins.
+end
+
+function [w,t] = maxMarginOptimization_4_a(mE, ms, verbosity)
+    f_cnt = size(ms{1},1);
+    m_cnt = size(ms,2);
+    
+    % Construct matrix.
+    m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
+    for j=1:m_cnt
+        m_mat(:,j+1) = ms{j};
+    end
+    
+    m_mat = vertcat(m_mat, ones(1,m_cnt+1));
+    
+    y = vertcat(1,-ones(m_cnt,1));
+    
+    lambda = 1; %small means a harder margin
+    T      = 10000;
+    eta    = .0000001;  %gradient descent step size
+    
+    w = SVMGD(m_mat',y,lambda,T,eta);
+    
+    w = w(1:end-1,1);
+    t = 2*(1/norm(w)); % we multiply by two to get both margins.
 end
 
 function [lambda] = mixPolicies(mE, ms, verbosity)
@@ -151,7 +298,7 @@ function [lambda] = mixPolicies(mE, ms, verbosity)
 
     % Solve optimization to determine lambda weights.
     cvx_begin
-        if verbosity ~= 0
+        if verbosity == 2
             cvx_quiet(false);
         else
             cvx_quiet(true);

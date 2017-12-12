@@ -25,8 +25,9 @@ rand('seed',mdp_params.seed);
 % Build action mapping.
 sa_s = zeros(mdp_params.n^2,5,5);
 sa_p = zeros(mdp_params.n^2,5,5);
-for y=1:mdp_params.n,
-    for x=1:mdp_params.n,
+
+for y=1:mdp_params.n
+    for x=1:mdp_params.n
         s = (y-1)*mdp_params.n+x;
         successors = zeros(1,1,5);
         successors(1,1,1) = s;
@@ -53,14 +54,14 @@ mdp_data = struct(...
 % Fill in the reward function.
 R_SCALE = 100;
 r = zeros(mdp_params.n^2,5);
-for yc=1:mdp_params.n/mdp_params.b,
-    for xc=1:mdp_params.n/mdp_params.b,
+for yc=1:mdp_params.n/mdp_params.b
+    for xc=1:mdp_params.n/mdp_params.b
         % Select a reward for macro-cell.
         macro_reward = (rand(1,1).^8)*R_SCALE;
         
         % Assign reward to all state-action pairs in macro-cell.
-        for y=(yc-1)*mdp_params.b+1:yc*mdp_params.b,
-            for x=(xc-1)*mdp_params.b+1:xc*mdp_params.b,
+        for y=(yc-1)*mdp_params.b+1:yc*mdp_params.b
+            for x=(xc-1)*mdp_params.b+1:xc*mdp_params.b
                 r((y-1)*mdp_params.n+x,:) = repmat(macro_reward,1,5);
             end;
         end;

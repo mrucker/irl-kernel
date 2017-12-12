@@ -11,18 +11,18 @@ function [feature_data,true_feature_map] = gridworldfeatures(mdp_params,mdp_data
 mdp_params = gridworlddefaultparams(mdp_params);
 
 % Construct adjacency table.
-stateadjacency = sparse([],[],[],mdp_data.states,mdp_data.states,...
-    mdp_data.states*mdp_data.actions);
-for s=1:mdp_data.states,
-    for a=1:mdp_data.actions,
+stateadjacency = sparse([],[],[], mdp_data.states, mdp_data.states, mdp_data.states*mdp_data.actions);
+
+for s=1:mdp_data.states
+    for a=1:mdp_data.actions
         stateadjacency(s,mdp_data.sa_s(s,a,1)) = 1;
     end;
 end;
 
-% Construct split table.
+% Construct split table. Intentionally poor features resulting in highly non-linear relationship.
 splittable = zeros(mdp_data.states,(mdp_params.n-1)*2);
-for y=1:mdp_params.n,
-    for x=1:mdp_params.n,
+for y=1:mdp_params.n
+    for x=1:mdp_params.n
         % Compute x and y split tables.
         xtable = horzcat(zeros(1,x-1),ones(1,mdp_params.n-x));
         ytable = horzcat(zeros(1,y-1),ones(1,mdp_params.n-y));
@@ -33,11 +33,11 @@ end;
 % Return feature data structure.
 feature_data = struct('stateadjacency',stateadjacency,'splittable',splittable);
 
-% Construct true feature map.
-true_feature_map = sparse([],[],[],mdp_data.states,...
-    mdp_data.states/(mdp_params.b^2),mdp_data.states);
-for y=1:mdp_params.n,
-    for x=1:mdp_params.n,
+% Construct true feature map. All states belonging to the same macro cell have a shared feature.
+true_feature_map = sparse([],[],[], mdp_data.states, mdp_data.states/(mdp_params.b^2), mdp_data.states);
+
+for y=1:mdp_params.n
+    for x=1:mdp_params.n
         cx = ceil(x/mdp_params.b);
         cy = ceil(y/mdp_params.b);
         feat = (cy-1)*(mdp_params.n/mdp_params.b)+cx;

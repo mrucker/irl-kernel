@@ -5,8 +5,8 @@ close all; clear; clc;
 algorithm_params = struct();
 mdp_model        = 'linearmdp';
 mdp              = 'gridworld';
-mdp_params       = struct('n',4,'determinism',1,'seed', sum(100*clock), 'b',4, 'discount',0.9);
-test_params      = struct('training_sample_lengths', 128, 'training_samples', 512, 'verbosity',2);
+mdp_params       = struct('n',2,'determinism',1,'seed', sum(100*clock), 'b',1, 'discount',.9);
+test_params      = struct('training_sample_lengths', 128, 'training_samples', 64, 'verbosity',1);
 verbosity        = test_params.verbosity;
 
 [mdp_data,r,feature_data,true_feature_map] = feval(strcat(mdp,'build'),mdp_params);
