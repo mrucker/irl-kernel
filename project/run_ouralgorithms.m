@@ -10,12 +10,13 @@ add_ourpaths; %includes all the paths required to run our code
 
 %algorithm       = 'firl';
 %algorithm       = 'an';
-algorithm        = 'algorithm2';
+algorithm       = 'algorithm2';
+%algorithm        = 'mmp';
 %all_features = bad features. true_features = perfect features. (0,0) = good features.
-algorithm_params = struct('all_features',0,'true_features',1);
+algorithm_params = struct('all_features',0,'true_features',1, 'p', 1);
 mdp_model        = 'linearmdp';
 mdp              = 'gridworld';%sum(100*clock)
-mdp_params       = struct('n',16, 'determinism',1, 'seed', 10, 'b',4, 'discount',.9);
+mdp_params       = struct('n',64, 'determinism',1, 'seed', 10, 'b',4, 'discount',.9);
 test_params      = struct('training_sample_lengths', 128, 'training_samples', 512, 'verbosity',1);
 
 test_result = runtest(algorithm, algorithm_params, mdp_model, mdp, mdp_params, test_params);

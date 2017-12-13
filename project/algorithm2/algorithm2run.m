@@ -75,7 +75,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
         %[w2, t2] = maxMarginOptimization_3_b(mE, ms, verbosity);
         %[w1, t1] = maxMarginOptimization_1_a(mE, ms, verbosity);
         %[w2, t2] = maxMarginOptimization_1_c(mE, ms, verbosity);
-        [ws{i}, ts{i}] = maxMarginOptimization_5_a(mE, ms, verbosity);
+        [ws{i}, ts{i}] = maxMarginOptimization_5_a(mE, ms, verbosity, algorithm_params.p);
         
         % Print t.
         if verbosity ~= 0
@@ -322,7 +322,7 @@ function [w,t] = maxMarginOptimization_4_a(mE, ms, verbosity)
 end
 
 %another version of soft-max using the hinge-loss objective. 
-function [w,t] = maxMarginOptimization_5_a(mE, ms, verbosity)
+function [w,t] = maxMarginOptimization_5_a(mE, ms, verbosity, p)
     f_cnt = size(ms{1},1);
     m_cnt = size(ms,2);
     
@@ -346,7 +346,7 @@ function [w,t] = maxMarginOptimization_5_a(mE, ms, verbosity)
             cvx_quiet(true);
         end
         variables a(m_cnt+1);
-        maximize(sum(a) - 1/2*quad_form(a.*y, kp(m_mat,m_mat,3)))
+        maximize(sum(a) - 1/2*quad_form(a.*y, kp(m_mat,m_mat,p)))
         subject to
             0 == a'*y;
             0 <= a;
