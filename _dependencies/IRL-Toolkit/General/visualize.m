@@ -1,5 +1,13 @@
 % Visualize MDP state space with given IRL test solution.
-function visualize(test_result,suppress_intermediate)
+function visualize(test_result,suppress_intermediate, algorithm, algorithm_params)
+
+if algorithm_params.true_features == 1
+    features = 'great features';
+elseif algorithm_params.all_features == 1
+    features = 'bad features';
+else
+    features = 'good features';
+end
 
 if nargin == 1
     suppress_intermediate = 0;
@@ -56,7 +64,7 @@ if ~suppress_intermediate
 end
 
 % Create final figure.
-figure;
+figure('Name',strcat(algorithm, ' (',features,')'),'NumberTitle','off');
 hold on;
 grid on;
 cla;

@@ -63,7 +63,6 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
 
     rs = {rand_r};
     ps = {rand_p};
-    ws = {rand_w};
     ms = {rand_m};
     ts = {0};    
 
@@ -72,10 +71,10 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     while 1        
         
         %Step 2
-        %[w2, t2] = maxMarginOptimization_3_b(mE, ms, verbosity);
-        %[w1, t1] = maxMarginOptimization_1_a(mE, ms, verbosity);
-        %[w2, t2] = maxMarginOptimization_1_c(mE, ms, verbosity);
-        [ws{i}, ts{i}] = maxMarginOptimization_5_a(mE, ms, verbosity, algorithm_params.p);
+        %[r1, t1] = maxMarginOptimization_1_a(mE, ms, F, actions, verbosity);
+        %[r2, t2] = maxMarginOptimization_2_a(mE, ms, F, actions, verbosity);
+        %[r3, t3] = maxMarginOptimization_3_a(mE, ms, F, actions, verbosity);
+        [rs{i}, ts{i}] = maxMarginOptimization_1_a(mE, ms, F, actions, verbosity, algorithm_params.p);
         
         % Print t.
         if verbosity ~= 0
@@ -88,8 +87,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
             break;
         end
 
-        %Step 4
-        rs{i} = repmat(F'*ws{i}, 1, actions);
+        %Step 4        
         ps{i} = standardmdpsolve(mdp_data, rs{i});
 
         %Step 5
@@ -100,7 +98,6 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     end
 
     % Compute mu for last policy    
-    rs{i} = repmat(F'*ws{i}, 1, actions);
     ps{i} = standardmdpsolve(mdp_data, rs{i});
     ms{i} = F*standardmdpfrequency(mdp_data, ps{i});
     
@@ -114,11 +111,12 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     
     idx = i-2;
 
-    irl_result = marshallResults(rs{idx}, ws{idx}, mdp_model, mdp_data, time);
+    %irl_result = marshallResults(rs{idx}, ws{idx}, mdp_model, mdp_data, time);
+    irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
 end
 
 %a version of the hard-margin SVM where the margin is directly optimized
-function [w,t] = maxMarginOptimization_1_a(mE, ms, verbosity)
+function [r,t] = maxMarginOptimization_1_a(mE, ms, F, actions, verbosity, varargin)
     f_cnt = size(mE,1);
     m_cnt = size(ms,2);
     
@@ -144,69 +142,12 @@ function [w,t] = maxMarginOptimization_1_a(mE, ms, verbosity)
             t <= k(w,mE) - k(w,m_mat);
     cvx_end
     warning('off','all')
+    
+    r = repmat(F'*w, 1, actions);
 end
-
-%can't get it to work with a polynomial kernel
-function [w,t] = maxMarginOptimization_1_b(mE, ms, verbosity)
-    f_cnt = size(mE,1);
-    m_cnt = size(ms,2);
-    
-    % Construct matrix.
-    m_mat = zeros(f_cnt,m_cnt);
-    for j=1:m_cnt
-        m_mat(:,j) = ms{j};
-    end
-    
-    warning('off','all')
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables t w(f_cnt);
-        maximize(t);
-        subject to
-            1 >= power_pos(w'*w+1,2);
-            t <= w'*mE - w'*m_mat;
-    cvx_end
-    warning('off','all')
-end
-
-%can't get it to work with a polynomial kernel
-function [w,t] = maxMarginOptimization_1_c(mE, ms, verbosity)
-    f_cnt = size(mE,1);
-    m_cnt = size(ms,2);
-    
-    % Construct matrix.
-    m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
-    for j=1:m_cnt
-        m_mat(:,j+1) = ms{j};
-    end
-    
-    y = vertcat(1,-ones(m_cnt,1));
-    
-    k = @(x1,x2) x1'*x2;
-    
-    warning('off','all')
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables t w(f_cnt);
-        maximize(t);
-        subject to
-            1 >= k(w,w);
-            t <= k(w,m_mat)*y;
-    cvx_end
-    warning('off','all')
-end
-
 
 %standard version soft-max which allowing some error in the decision boundary
-function [w,t] = maxMarginOptimization_2_a(mE, ms, verbosity)
+function [r,t] = maxMarginOptimization_2_a(mE, ms, F, actions, verbosity, varargin)
     f_cnt = size(ms{1},1);
     m_cnt = size(ms,2);
     
@@ -233,11 +174,12 @@ function [w,t] = maxMarginOptimization_2_a(mE, ms, verbosity)
     cvx_end
     warning('off','all')
     
+    r = repmat(F'*w, 1, actions);
     t = 2*(1/norm(w)); % we multiply by two to get both margins.
 end
 
 %another version of soft-max using the hinge-loss objective. 
-function [w,t] = maxMarginOptimization_3_a(mE, ms, verbosity)
+function [r,t] = maxMarginOptimization_3_a(mE, ms, F, actions, verbosity, varargin)
     f_cnt = size(ms{1},1);
     m_cnt = size(ms,2);
     
@@ -263,66 +205,12 @@ function [w,t] = maxMarginOptimization_3_a(mE, ms, verbosity)
     cvx_end
     warning('off','all')
     
-    t = 2*(1/norm(w)); % we multiply by two to get both margins.
-end
-
-function [w,t] = maxMarginOptimization_3_b(mE, ms, verbosity)
-    f_cnt = size(ms{1},1);
-    m_cnt = size(ms,2);
-    
-    % Construct matrix.
-    m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
-    for j=1:m_cnt
-        m_mat(:,j+1) = ms{j};
-    end
-    
-    m_mat = vertcat(m_mat, ones(1,m_cnt+1));
-    
-    y = vertcat(1,-ones(m_cnt,1));
-    
-    warning('off','all')
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables w(f_cnt+1);
-        minimize( 100*sum(max(0,1-y.*( m_mat'*w))) + w(1:end-1,1)'*w(1:end-1,1))
-    cvx_end
-    warning('off','all')
-    
-    
-    w = w(1:end-1,1);
-    t = 2*(1/norm(w)); % we multiply by two to get both margins.
-end
-
-function [w,t] = maxMarginOptimization_4_a(mE, ms, verbosity)
-    f_cnt = size(ms{1},1);
-    m_cnt = size(ms,2);
-    
-    % Construct matrix.
-    m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
-    for j=1:m_cnt
-        m_mat(:,j+1) = ms{j};
-    end
-    
-    m_mat = vertcat(m_mat, ones(1,m_cnt+1));
-    
-    y = vertcat(1,-ones(m_cnt,1));
-    
-    lambda = 1; %small means a harder margin
-    T      = 10000;
-    eta    = .0000001;  %gradient descent step size
-    
-    w = SVMGD(m_mat',y,lambda,T,eta);
-    
-    w = w(1:end-1,1);
+    r = repmat(F'*w, 1, actions);
     t = 2*(1/norm(w)); % we multiply by two to get both margins.
 end
 
 %another version of soft-max using the hinge-loss objective. 
-function [w,t] = maxMarginOptimization_5_a(mE, ms, verbosity, p)
+function [r,t] = maxMarginOptimization_5_a(mE, ms, F, actions, p, verbosity)
     f_cnt = size(ms{1},1);
     m_cnt = size(ms,2);
     
@@ -354,6 +242,7 @@ function [w,t] = maxMarginOptimization_5_a(mE, ms, verbosity, p)
     warning('off','all')
         
     w = m_mat*(a.*y);
+    r = repmat(F'*w, 1, actions);
     t = 2/norm(w); % we multiply by two to get both margins.
 end
 
