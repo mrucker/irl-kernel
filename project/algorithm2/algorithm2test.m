@@ -2,7 +2,7 @@ add_ourpaths; %includes all the paths required to run our code
 
 close all; clear; clc;
 
-algorithm_params = struct();
+algorithm_params = struct('p', 2);
 mdp_model        = 'linearmdp';
 mdp              = 'gridworld';
 mdp_params       = struct('n',2,'determinism',1,'seed', sum(100*clock), 'b',1, 'discount',.9);

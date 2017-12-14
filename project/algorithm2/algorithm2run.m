@@ -31,7 +31,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     % Build feature membership matrix.
     if algorithm_params.all_features
         F = feature_data.splittable;
-        F = horzcat(F,ones(states,1)); %We add a row of 1s to the feature matrix to ensure we can control the reward at every state
+        F = horzcat(F,ones(states,1)); %We add a row of 1s to the feature matrix to ensure we can control the reward at every state                
     elseif algorithm_params.true_features
         F = true_features;
     else
@@ -40,15 +40,14 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
 
     % Count features.
     features = size(F,2);
-    F = F';
-
-
+    F = F';    
+    
     % Construct state expectations.
-    mE   = zeros(features,1);    
+    mE   = zeros(features,1);
     
     for i=1:N
         for t=1:T
-            mE = mE + F(:, example_samples{i,t}(1)) * mdp_data.discount^(t-1);
+            mE  = mE  + F (:, example_samples{i,t}(1)) * mdp_data.discount^(t-1);
         end
     end
     
@@ -59,7 +58,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     rand_w = rand_w/norm(rand_w); %not important to the algorithm, but this allows for comparisons against future w's.
     rand_r = repmat(F'*rand_w, 1, actions);
     rand_p = standardmdpsolve(mdp_data, rand_r);
-    rand_m = F*standardmdpfrequency(mdp_data, rand_p);
+    rand_m  = F*standardmdpfrequency(mdp_data, rand_p);
 
     rs = {rand_r};
     ps = {rand_p};
@@ -67,40 +66,45 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     ts = {0};    
 
     i = 2;
-
+    
     while 1        
-        
+
         %Step 2
         %[r1, t1] = maxMarginOptimization_1_a(mE, ms, F, actions, verbosity);
         %[r2, t2] = maxMarginOptimization_2_a(mE, ms, F, actions, verbosity);
         %[r3, t3] = maxMarginOptimization_3_a(mE, ms, F, actions, verbosity);
-        [rs{i}, ts{i}] = maxMarginOptimization_1_a(mE, ms, F, actions, verbosity, algorithm_params.p);
+        %[r4, t4] = maxMarginOptimization_5_a(mE, ms, F, actions, verbosity, 1);
+        [r, t, f] = maxMarginOptimization_6_a(mE, ms, F, actions, verbosity, algorithm_params.p);
         
         % Print t.
         if verbosity ~= 0
-         %   fprintf(1,'Completed IRL iteration, w=(%f,%f), t=(%f,%f)\n',w1(1)/ws{i}(1),w1(2)/ws{i}(2),ts{i},t1(1));
-            fprintf(1,'Completed IRL iteration, t=%f\n',ts{i});
+            fprintf(1,'Completed IRL iteration, t=%f, f=%f\n',t,f);
         end
+                
+        rs{i} = r;
+        ts{i} = t;
         
         %Step 3
-        if (ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i >= 5 && abs(ts{i}-ts{i-1}) > 100000))
-            break;
+        if i > 30
+            if (i == 50 || ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
+                break;
+            end      
         end
 
         %Step 4        
         ps{i} = standardmdpsolve(mdp_data, rs{i});
 
         %Step 5
-        ms{i} = F*standardmdpfrequency(mdp_data, ps{i});
+        ms{i}  = F*standardmdpfrequency(mdp_data, ps{i});
 
         %Step 6
         i = i+1;
     end
-
+    
     % Compute mu for last policy    
     ps{i} = standardmdpsolve(mdp_data, rs{i});
     ms{i} = F*standardmdpfrequency(mdp_data, ps{i});
-    
+
     % In Abbeel & Ng's algorithm, we should use the weights lambda to construct
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
@@ -109,7 +113,10 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
 
     time = toc;
     
-    idx = i-2;
+    %idx = i;
+    
+    %d = cell2mat(ts);
+    %idx = find(d == min(d(2:end)));
 
     %irl_result = marshallResults(rs{idx}, ws{idx}, mdp_model, mdp_data, time);
     irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
@@ -210,7 +217,7 @@ function [r,t] = maxMarginOptimization_3_a(mE, ms, F, actions, verbosity, vararg
 end
 
 %another version of soft-max using the hinge-loss objective. 
-function [r,t] = maxMarginOptimization_5_a(mE, ms, F, actions, p, verbosity)
+function [r,t] = maxMarginOptimization_5_a(mE, ms, F, actions, verbosity, p, varargin)
     f_cnt = size(ms{1},1);
     m_cnt = size(ms,2);
     
@@ -218,7 +225,7 @@ function [r,t] = maxMarginOptimization_5_a(mE, ms, F, actions, p, verbosity)
     m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
     for j=1:m_cnt
         m_mat(:,j+1) = ms{j};
-    end
+    end    
     
     y = vertcat(1,-ones(m_cnt,1));
     
@@ -240,10 +247,73 @@ function [r,t] = maxMarginOptimization_5_a(mE, ms, F, actions, p, verbosity)
             0 <= a;
     cvx_end
     warning('off','all')
-        
+
     w = m_mat*(a.*y);
     r = repmat(F'*w, 1, actions);
     t = 2/norm(w); % we multiply by two to get both margins.
+end
+
+%First iteration solving the lagrangian dual and using polynomial kernels
+function [r,m,f] = maxMarginOptimization_6_a(mE, ms, F, actions, verbosity, p, varargin)
+    f_cnt = size(ms{1},1);
+    m_cnt = size(ms,2);
+    
+    % Construct matrix.
+    m_mat = horzcat(mE, zeros(f_cnt,m_cnt));
+    for j=1:m_cnt
+        m_mat(:,j+1) = ms{j};
+    end
+    
+    cnt_m = sum(sum(m_mat~=0));
+    srt_m = sort(m_mat(m_mat~=0));
+    
+    %m_mat = m_mat/ srt_m(round(cnt_m/7));
+    
+    m_mat = m_mat/1.2;
+    
+    y = vertcat(1,-ones(m_cnt,1));
+        
+    if p == 1
+        k = @(x1,x2) x1'*x2;
+    else
+        k = @(x1,x2) power(x1'*x2 + 1*ones(size(x1,2), size(x2,2)), p*ones(size(x1,2), size(x2,2)));
+    end
+    
+    %k = @(x1,x2) tanh(1/9*x1'*x2);
+    
+    warning('off','all')
+    cvx_begin
+        if verbosity == 2
+            cvx_quiet(false);
+        else
+            cvx_quiet(true);
+        end
+        variables a(m_cnt+1);
+        maximize(sum(a) - 1/2*quad_form(a.*y, k(m_mat,m_mat)))
+        subject to
+            0 == a'*y;
+            0 <= a;
+    cvx_end
+    warning('off','all')            
+ 
+    %"[for b0] we typically use an average of all the solutions for numerical stability" (ESL pg.421)
+    b0 = mean(y - k(m_mat, m_mat)'*(a.*y));   
+    
+    r = k(m_mat,F)'*(a.*y);
+    d = y.*(k(m_mat,m_mat)*(a.*y) + b0);
+
+    %Useful to study kernel polynomials of degree 2. This is the new feature space we are working in. [ASSUMES 2 FEATURES]
+    %h = @(x) [ones(1,size(x,2));sqrt(2)*x(1,:);sqrt(2)*x(2,:);x(1,:).*x(1,:);x(2,:).*x(2,:);sqrt(2)*x(1,:).*x(2,:)];
+    
+    %When working in higher dimensions I'm not sure this has any meaning. (such as polynomial kernels above 1).
+    %When working within the dimensions of x this is the normal to the hyperplane.
+    %w = m_mat*(a.*y);
+    %t = F'*w - k(m_mat, F)'*(a.*y) < .1;
+    %assert(all(t), 'uhoh');
+    
+    r = repmat(r, 1, actions);    
+    m = 1/sqrt(sum(a));
+    f = sum(sign(d) == -1);
 end
 
 function [lambda] = mixPolicies(mE, ms, verbosity)
@@ -266,11 +336,12 @@ function [lambda] = mixPolicies(mE, ms, verbosity)
         end
         variable m(f_cnt);
         variable l(m_cnt);
-        minimize(sum_square(m-mE));
-        subject to
+        minimize(norm(m-mE));
+        subject to            
             m == m_mat*l;
             l >= zeros(m_cnt,1);
-            ones(m_cnt,1)'*l == 1;
+            1 >= norm(l,1);
+            1 == ones(m_cnt,1)'*l;
     cvx_end
     
     lambda = l;
