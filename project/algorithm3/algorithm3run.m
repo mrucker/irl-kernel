@@ -1,4 +1,4 @@
-function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, feature_data, example_samples, true_features, verbosity)
+function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, feature_data, example_samples, true_features, verbosity)
 
 % algorithm_params - parameters of the MMP algorithm:
 %       seed (0) - initialization for random seed
@@ -14,7 +14,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
 %       time - total running time
 
     % Fill in default parameters.
-    algorithm_params = algorithm2defaultparams(algorithm_params);
+    algorithm_params = algorithm3defaultparams(algorithm_params);
 
     % Set random seed.
     if algorithm_params.seed ~= 0
@@ -41,8 +41,6 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     % Count features.
     
     F = F';
-    F_0 = F; 
-    F = poly_f(F,2); %convert to the feature space of our kernel
 
     features = size(F,1);
 
@@ -56,16 +54,16 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     end
 
     sE = sE/N;
-    
+
     true_r = algorithm_params.true_r;
     true_p = standardmdpsolve(mdp_data, true_r);
     %sE     = standardmdpfrequency(mdp_data, true_p);
     mE     = F*sE;
 
     % Step 1
-    rand_w = rand(size(F_0,1),1);
+    rand_w = rand(features,1);
     rand_w = rand_w/norm(rand_w); %not important to the algorithm, but this allows for comparisons against future w's.
-    rand_r = repmat(F_0*rand_w, 1, actions);
+    rand_r = repmat(F'*rand_w, 1, actions);
     rand_p = standardmdpsolve(mdp_data, rand_r);
     rand_s = standardmdpfrequency(mdp_data, rand_p);
     rand_m = F*rand_s;
@@ -80,17 +78,11 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     
     while 1
 
-        m_cnt = i-1;
-        f_cnt = size(mE,1);
-
-        v = horzcat(mE, cell2mat(ms));
-        s = horzcat(sE, cell2mat(ss));
-        y = vertcat(1,-ones(m_cnt,1));
-        
+        x = horzcat(sE, cell2mat(ss));        
+        y = vertcat(1,-ones(i-1,1));
         
         %Step 2
-        [m, r, w, ~, d] = maxMarginOptimization_4_s(y, v, verbosity, 1);
-        [m1, r1, w1, ~, d1] = maxMarginOptimization_4_b(y, s, F_0, verbosity, 2);
+        [m, r, w, ~, d] = maxMarginOptimization_4_s(y, x, F, verbosity, algorithm_params.p, algorithm_params.s);
         
         % Print t.
         if verbosity ~= 0
@@ -101,7 +93,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
         ts{i} = m;
         
         %Step 3
-        if (ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
+        if (i==40 || ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
             break;
         end
 
@@ -136,91 +128,12 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
 end
 
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_1_h(y, x, verbosity, varargin)
+function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_s(y, x, F, verbosity, varargin)
     f_cnt = size(x,1);
-    o_cnt = size(x,2);
-        
-    warning('off','all')
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables m w(f_cnt);
-        maximize(m);
-        subject to
-            1 >= norm(w);
-            m <= y.*(x'*w);
-    cvx_end
-    warning('off','all')
+    o_cnt = size(x,2);    
     
-    dk = @(x) (x'*w);
-    ds = y.*(x'*w);
-
-    margin  = m;
-    right   = sum(sign(ds) == 1);
-    wrong   = sum(sign(ds) == -1);
-    unknown = sum(sign(ds) == 0);
-end
-
-%First iteration solving the lagrangian dual and using polynomial kernels
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_s(y, x, verbosity, p)
-    f_cnt = size(x,1);
-    o_cnt = size(x,2);
-
-    if p == 1
-        k = @(x1,x2) x1'*x2;
-    else
-        k = @(x1,x2) power(x1'*x2 + ones(size(x1,2), size(x2,2)), p*ones(size(x1,2), size(x2,2)));
-    end
     
-    warning('off','all')
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables bb a(o_cnt);
-        maximize(sum(a) - 1/2*quad_form(a.*y, k(x,x))) %dual problem
-        subject to
-            0 == a'*y;
-            0 <= a;
-    cvx_end
-    warning('off','all')
-    
-    %Useful to study kernel polynomials of degree 2. This is the new feature space we are working in.
-    %f_x = poly_f(x,1);
-    
-    %When working in higher dimensions I'm not sure this has any meaning. (such as polynomial kernels above 1).
-    %When working within the dimensions of x this is the normal to the hyperplane.
-    %f_w = f_x*(a.*y);
-    %f_m = 1/norm(f_w);
-    
-    %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
-    b0 = sum(y - k(x, x)'*(a.*y))/sum(a>0);
-    
-    dk = @(xk) k(xk,x)*(a.*y) + b0;
-    ds = y.*dk(x);
-        
-    margin  = 1/sqrt(sum(a));
-    right   = sum(sign(ds) == 1);
-    wrong   = sum(sign(ds) == -1);
-    unknown = sum(sign(ds) == 0);
-end
-
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_b(y, x, F, verbosity, p)
-    f_cnt = size(x,1);
-    o_cnt = size(x,2);
-    
-    if p == 1
-        k = @(x1,x2) x1'*x2;
-    else
-        k = @(x1,x2) power(x1'*x2 + 1*ones(size(x1,2), size(x2,2)), p*ones(size(x1,2), size(x2,2)));
-    end
-    
-    z = x'*k(F,F)*x;
+    z = x'*k(F,F, varargin)*x;
     
     warning('off','all')
     cvx_begin
@@ -249,10 +162,12 @@ function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_b(y, x, F
     %b0 = sum(y - k(z, z)*(a.*y))/sum(a>0);
     b0 = (sum(y.*(a>0)) - sum(z*(a.*y)))/sum(a>0);
     
-    dk = @(m) k(m,F)*x*(a.*y) + b0;
-    ds = sign(y.*(z*(a.*y) + b0));
-        
+    dk = @(m) k(m,F, varargin)*x*(a.*y) + b0;
+
     margin  = 1/sqrt(sum(a));
+    
+    %ds = sign(y.*(z*(a.*y) + b0));
+    ds = zeros(size(x,2),1);
     right   = sum(ds == 1);
     wrong   = sum(ds == -1);
     unknown = sum(ds == 0);
@@ -317,25 +232,53 @@ function irl_result = marshallResults(r, w, mdp_model, mdp_data, time)
         'time',time);
 end
 
-function features = poly_f(F, p)
-
-    if (p == 1)
-        features = F;
-    else
-        features = [];
-
-        for i = 1:size(F,2)
-            n1 = [1];
-            n2 = [sqrt(2)*(F(:,i))];
-            n3 = [(F(:,i)).*(F(:,i))];
-
-            n4=[];
-            for j = 1:size(F,1)
-                for k = (j+1):size(F,1)
-                    n4 = vertcat(n4,[sqrt(2)*F(j,i)*F(k,i)]);
-                end
-            end
-            features = horzcat(features, vertcat(n1, n2, n3, n4));
+%Kernels
+function m = parse(x1, x2, k)
+    m = zeros(size(x1,1),size(x2,2));
+    
+    x1 = x1';
+    
+    for c = 1:size(x2,2)
+        for r = 1:size(x1,1)
+            m(r,c) = k(x1(r,:)', x2(:,c));
         end
     end
 end
+
+function m = k(x1, x2, params)
+    p = params{1};
+    s = params{2};
+    
+    %m = kernel_poly(x1,x2,p);
+    %m = parse(x1,x2, kernel_gaussian(s));
+    m = parse(x1,x2, kernel_exponential(s));    
+    %m = parse(x1,x2, kernel_tanimoto_jaccard_coefficient());
+end
+
+function k = kernel_poly(x1, x2, p)
+    
+    assert( p > 0, 'What are you doing!?');
+
+    if p == 1
+        k = x1'*x2;
+    else
+        k = power(x1'*x2 + ones(size(x1,2), size(x2,2)), p*ones(size(x1,2), size(x2,2)));
+    end
+end
+
+function k = kernel_sigmoid()
+    k = @(x1,x2) tanh(x1'*x2);
+end
+
+function k = kernel_exponential(s)
+    k = @(x1,x2) exp(-norm(x1-x2)/s);
+end
+
+function k = kernel_gaussian(s)
+    k = @(x1,x2) exp(-sum_square(x1-x2)/s);
+end
+
+function k = kernel_tanimoto_jaccard_coefficient()
+    k = @(x1,x2) (x1'*x2)/(x1'*x2 + sum(abs(x1-x2)));
+end
+%Kernels

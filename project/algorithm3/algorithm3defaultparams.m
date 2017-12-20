@@ -1,12 +1,12 @@
 % Fill in default parameters for the Abbeel & Ng algorithm.
-function algorithm_params = algorithm2defaultparams(algorithm_params)
+function algorithm_params = algorithm3defaultparams(algorithm_params)
 
 % Create default parameters.
 default_params = struct(...
     'seed',0,...
     'all_features',0,...
     'true_features',0,...
-    'epsilon', .1);
+    'epsilon', .00001);
 
 % Set parameters.
 algorithm_params = filldefaultparams(algorithm_params,default_params);

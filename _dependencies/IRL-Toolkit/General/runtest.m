@@ -54,8 +54,12 @@ else
     example_samples = test_params.true_examples;
 end
 
+algorithm_params = filldefaultparams(algorithm_params, struct('true_r', r));
+
 % Run IRL algorithm.
+tic
 irl_result = feval(strcat(algorithm,'run'),algorithm_params,mdp_data,mdp_model, feature_data,example_samples,true_feature_map,test_params.verbosity);
+toc
 
 % Evaluate result.
 test_result = evaluateirl(irl_result,r,example_samples,mdp_data,mdp_params,...
