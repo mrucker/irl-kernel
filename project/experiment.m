@@ -42,7 +42,7 @@ function N_Linearly_Seperable_N_Centered()
     
     count = 200;
     center_1 = [0;5];
-    center_2 = [5;0];
+    center_2 = [5;50];
     d_1 = 1;
     d_2 = 1;
             
@@ -248,8 +248,10 @@ function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_s(y, x, v
     %f_w = f_x*(a.*y);
     %f_m = 1/norm(f_w);
     
-    %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
-    b0 = sum(y - k(x, x)'*(a.*y))/sum(a>0);
+    %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)        
+    sv = x(:,round(a,8)>0);
+    sl = y(round(a,8)>0,1);
+    b0 = mean(sl - k(sv, x)*(a.*y));
     
     dk = @(xk) k(xk,x)*(a.*y) + b0;
     ds = y.*dk(x);

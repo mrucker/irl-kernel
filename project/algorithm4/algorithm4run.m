@@ -1,4 +1,4 @@
-function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, feature_data, example_samples, true_features, verbosity)
+function irl_result = algorithm4run(algorithm_params, mdp_data, mdp_model, feature_data, example_samples, true_features, verbosity)
 
 % algorithm_params - parameters of the MMP algorithm:
 %       seed (0) - initialization for random seed
@@ -55,8 +55,8 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
 
     sE = sE/N;
 
-    %true_r = algorithm_params.true_r;
-    %true_p = standardmdpsolve(mdp_data, true_r);
+    true_r = algorithm_params.true_r;
+    true_p = standardmdpsolve(mdp_data, true_r);
     %sE     = standardmdpfrequency(mdp_data, true_p);
     mE     = F*sE;
 
@@ -84,21 +84,18 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
         y = vertcat(1,-ones(i-1,1));
         
         %Step 2
-        [m, g, b, u, r] = maxMarginOptimization_4_s(y, x, ff, verbosity);
-        
-        rn = (r-min(r))/(max(r)-min(r));
-        rd = rn'*x(:,1) - rn'*x(:,i);
+        [m, g, b, ~, r] = maxMarginOptimization_4_s(y, x, ff, verbosity);
         
         % Print t.
         if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration,i=%d, t=%f, g=%d, b=%d, u=%d, sum(r)=%f, rd=%f\n',i,m,g,b,u,sum(rn),rd);
+            fprintf(1,'Completed IRL iteration, t=%f, r=%d, w=%d\n',m,r,w);
         end
                 
         rs{i} = repmat(r, 1, actions);
         ts{i} = m;
         
         %Step 3
-        if (i==200 || ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
+        if (i==80 || ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
             break;
         end
 
@@ -113,35 +110,28 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     
     % Compute mu for last policy    
     ps{i} = standardmdpsolve(mdp_data, rs{i});
-    ss{i} = standardmdpfrequency(mdp_data, ps{i});
-    ms{i} = F*ss{i};
-    
+    ms{i} = F*standardmdpfrequency(mdp_data, ps{i});
+    fs{i} = standardmdpfrequency(mdp_data, ps{i});
 
     % In Abbeel & Ng's algorithm, we should use the weights lambda to construct
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    [~,idx] = max(mixPolicies_1(sE, ss, ff, verbosity));
-    %[~,idx] = max(mixPolicies_2(mE, ms, ff, verbosity));
+    [~,idx] = max(mixPolicies(mE, ms, verbosity));
 
     time = toc;
     
-    m = ts{idx};
-    r = rs{idx};
-    rn = (r-min(r))/(max(r)-min(r));
-    rd = rn'*x(:,1) - rn'*x(:,idx);
+    %idx = i;
     
-    if verbosity ~= 0
-        fprintf(1,'Completed IRL iteration,i=%d, t=%f, g=%d, b=%d, u=%d, sum(r)=%f, rd=%f\n',idx,m,0,0,i,sum(rn),rd);
-    end
-    
+    %d = cell2mat(ts);
+    %idx = find(d == min(d(2:end)));
+
     %irl_result = marshallResults(rs{idx}, ws{idx}, mdp_model, mdp_data, time);
     irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
 end
 
 function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, x, ff, verbosity, varargin)    
     o_cnt = size(x,2);
-    f_cnt = size(x,1);
 
     vv = x'*ff*x;
 
@@ -160,14 +150,6 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     cvx_end
     warning('off','all')
     
-    sv = x(:,round(a,8)>0);
-    sl = y(round(a,8)>0,1);
-    
-    %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
-    b0 = mean(sl - sv'*ff*x*(a.*y)); %aka , -(a'*vv*(a.*y)/sum(a));
-    rs = ff*x*(a.*y) + b0;
-    
-    
     %Useful to study kernel polynomials of degree 2. This is the new feature space we are working in.
     %f_x = poly_f(x,1);
     
@@ -176,27 +158,30 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     %f_w = f_x*(a.*y);
     %f_m = 1/norm(f_w);
     
-    
+    %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
     %b0 = sum(y - k(z, z)*(a.*y))/sum(a>0);
-    %b0 = (sum(y.*(a>0)) - sum(vv*(a.*y)))/sum(a>0);    
+    b0 = (sum(y.*(a>0)) - sum(vv*(a.*y)))/sum(a>0);
 
-    %ds      = sign(y.*(vv*(a.*y) + b0));
-    ds      = zeros(size(x,2),1);
+    margin  = 1/sqrt(sum(a));
+
+    %ds = sign(y.*(z*(a.*y) + b0));
+    ds = zeros(size(x,2),1);
     right   = sum(ds == 1);
     wrong   = sum(ds == -1);
     unknown = sum(ds == 0);
-    reward  = rs;
-    margin  = 1/sqrt(sum(a));    
+    reward = ff*x*(a.*y) + b0;
 end
 
-function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
-    s_mat = cell2mat(ss);
-    
-    f_cnt = size(s_mat,1);
-    s_cnt = size(s_mat,2);
+function [lambda] = mixPolicies(mE, ms, verbosity)
+
+    f_cnt = size(ms{1},1);
+    m_cnt = size(ms,2);
 
     % Construct matrix.
-    
+    m_mat = zeros(f_cnt,m_cnt);
+    for j=1:m_cnt
+        m_mat(:,j) = ms{j};
+    end
 
     % Solve optimization to determine lambda weights.
     cvx_begin
@@ -205,36 +190,14 @@ function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
         else
             cvx_quiet(true);
         end
-        variables s(f_cnt) l(s_cnt);
-        minimize(s'*ff*s + sE'*ff*sE - 2*sE'*ff'*s);
-        subject to
-            s == s_mat*l;
-            l >= 0;
-            1 == sum(l);
-    cvx_end
-    
-    lambda = l;
-end
-
-function [lambda] = mixPolicies_2(mE, ms, ff, verbosity)
-    m_mat = cell2mat(ms);
-    
-    f_cnt = size(m_mat,1);
-    m_cnt = size(m_mat,2);
-    
-    % Solve optimization to determine lambda weights.
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables m(f_cnt) l(m_cnt);
+        variable m(f_cnt);
+        variable l(m_cnt);
         minimize(norm(m-mE));
-        subject to
+        subject to            
             m == m_mat*l;
-            l >= 0;
-            1 == sum(l);
+            l >= zeros(m_cnt,1);
+            1 >= norm(l,1);
+            1 == ones(m_cnt,1)'*l;
     cvx_end
     
     lambda = l;
@@ -270,7 +233,7 @@ end
 
 %Kernels
 function m = parse(x1, x2, k)
-    m = zeros(size(x1,2),size(x2,2));
+    m = zeros(size(x1,1),size(x2,2));
     
     x1 = x1';
     
@@ -285,10 +248,9 @@ function m = k(x1, x2, varargin)
     p = varargin{1};
     s = varargin{2};
     
-    %m = x1'*x2;
     %m = kernel_poly(x1,x2,p);
-    m = parse(x1,x2, kernel_gaussian(s));
-    %m = parse(x1,x2, kernel_exponential(s));    
+    %m = parse(x1,x2, kernel_gaussian(s));
+    m = parse(x1,x2, kernel_exponential(s));    
     %m = parse(x1,x2, kernel_tanimoto_jaccard_coefficient());
 end
 

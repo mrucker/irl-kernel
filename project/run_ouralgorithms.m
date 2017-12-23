@@ -8,19 +8,21 @@ add_ourpaths; %includes all the paths required to run our code
 %epsilon = 0.01;
 %lambda = 1;
 
-%algorithm        = 'gpirl';
-algorithm       = 'firl';
-algorithm       = 'an';
+%algorithm       = 'gpirl';
+%algorithm       = 'maxent';
+%algorithm       = 'mmpboost';
+%algorithm       = 'learch';
+%algorithm       = 'an';
 algorithm       = 'algorithm3';
 %algorithm       = 'mmp';
-%algorithm       = 'mmpboost';
+%algorithm       = 'firl';
 
 %all_features = bad features. true_features = perfect features. (0,0) = good features.
-algorithm_params = struct('all_features', 1, 'true_features',0 , 'epsilon', .01, 'p', 2, 's', .3);
+algorithm_params = struct('all_features', 1, 'true_features',0 , 'epsilon', .00001, 'p', 4, 's', .00001);
 mdp_model        = 'linearmdp';
-mdp              = 'gridworld';
-mdp_params       = struct('n',32, 'determinism',1, 'seed', sum(100*clock), 'b',1, 'discount',.9);
-test_params      = struct('training_sample_lengths', 100, 'training_samples', 128, 'verbosity',0);
+mdp              = 'gridworld';%sum(100*clock)
+mdp_params       = struct('n',128, 'determinism',1, 'seed',1000000, 'b',4, 'discount',.9);
+test_params      = struct('training_sample_lengths', 128, 'training_samples', 1000, 'verbosity',0);
 
 test_result = runtest(algorithm, algorithm_params, mdp_model, mdp, mdp_params, test_params);
 

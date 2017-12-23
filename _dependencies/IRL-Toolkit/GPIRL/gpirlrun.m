@@ -132,9 +132,9 @@ total_time = total_time+time;
 time = total_time;
 nll = best_nll;
 
-if verbosity ~= 0,
+%if verbosity ~= 0,
     fprintf(1,'Optimization completed in %f seconds with log-likelihood %f.\n',time,-nll);
-end;
+%end;
 
 % Return corresponding reward function.
 gp.Y = u;

@@ -28,4 +28,6 @@ for o=1:length(test_result)
             end
         end
     end
+    
+    fprintf('total runtime %f\n', test_result(o).irl_result.time);
 end
