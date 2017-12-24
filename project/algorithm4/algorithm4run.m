@@ -14,7 +14,7 @@ function irl_result = algorithm4run(algorithm_params, mdp_data, mdp_model, featu
 %       time - total running time
 
     % Fill in default parameters.
-    algorithm_params = algorithm3defaultparams(algorithm_params);
+    algorithm_params = algorithm4defaultparams(algorithm_params);
 
     % Set random seed.
     if algorithm_params.seed ~= 0
@@ -45,15 +45,13 @@ function irl_result = algorithm4run(algorithm_params, mdp_data, mdp_model, featu
     features = size(F,1);
 
     % Construct state expectations.
-    sE   = zeros(states,1);
+    sE   = zeros(states,N);
     
     for i=1:N
         for t=1:T
-           sE(example_samples{i,t}(1)) = sE(example_samples{i,t}(1)) + 1*mdp_data.discount^(t-1);
+           sE(example_samples{i,t}(1),i) = sE(example_samples{i,t}(1)) + 1*mdp_data.discount^(t-1);
         end
-    end
-
-    sE = sE/N;
+    end    
 
     true_r = algorithm_params.true_r;
     true_p = standardmdpsolve(mdp_data, true_r);
@@ -81,18 +79,18 @@ function irl_result = algorithm4run(algorithm_params, mdp_data, mdp_model, featu
     while 1
 
         x = horzcat(sE, cell2mat(ss));        
-        y = vertcat(1,-ones(i-1,1));
+        y = vertcat(ones(size(sE,2),1),-ones(i-1,1));
         
         %Step 2
-        [m, g, b, ~, r] = maxMarginOptimization_4_s(y, x, ff, verbosity);
+        [t, g, b, ~, r] = maxMarginOptimization_4_s(y, x, ff, verbosity);
         
         % Print t.
         if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration, t=%f, r=%d, w=%d\n',m,r,w);
+            fprintf(1,'Completed IRL iteration, t=%f, r=%d, w=%d\n',t,g,b);
         end
                 
         rs{i} = repmat(r, 1, actions);
-        ts{i} = m;
+        ts{i} = t;
         
         %Step 3
         if (i==80 || ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
@@ -117,7 +115,9 @@ function irl_result = algorithm4run(algorithm_params, mdp_data, mdp_model, featu
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    [~,idx] = max(mixPolicies(mE, ms, verbosity));
+    [~,idx] = max(mixPolicies_1(mean(sE,2), ss, ff, verbosity));
+    %[~,idx] = max(mixPolicies_2(mean(mE,2), ms, ff, verbosity));
+
 
     time = toc;
     
@@ -172,16 +172,14 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     reward = ff*x*(a.*y) + b0;
 end
 
-function [lambda] = mixPolicies(mE, ms, verbosity)
-
-    f_cnt = size(ms{1},1);
-    m_cnt = size(ms,2);
+function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
+    s_mat = cell2mat(ss);
+    
+    f_cnt = size(s_mat,1);
+    s_cnt = size(s_mat,2);
 
     % Construct matrix.
-    m_mat = zeros(f_cnt,m_cnt);
-    for j=1:m_cnt
-        m_mat(:,j) = ms{j};
-    end
+    
 
     % Solve optimization to determine lambda weights.
     cvx_begin
@@ -190,14 +188,36 @@ function [lambda] = mixPolicies(mE, ms, verbosity)
         else
             cvx_quiet(true);
         end
-        variable m(f_cnt);
-        variable l(m_cnt);
+        variables s(f_cnt) l(s_cnt);
+        minimize(s'*ff*s + sE'*ff*sE - 2*sE'*ff'*s);
+        subject to
+            s == s_mat*l;
+            l >= 0;
+            1 == sum(l);
+    cvx_end
+    
+    lambda = l;
+end
+
+function [lambda] = mixPolicies_2(mE, ms, ff, verbosity)
+    m_mat = cell2mat(ms);
+    
+    f_cnt = size(m_mat,1);
+    m_cnt = size(m_mat,2);
+    
+    % Solve optimization to determine lambda weights.
+    cvx_begin
+        if verbosity == 2
+            cvx_quiet(false);
+        else
+            cvx_quiet(true);
+        end
+        variables m(f_cnt) l(m_cnt);
         minimize(norm(m-mE));
-        subject to            
+        subject to
             m == m_mat*l;
-            l >= zeros(m_cnt,1);
-            1 >= norm(l,1);
-            1 == ones(m_cnt,1)'*l;
+            l >= 0;
+            1 == sum(l);
     cvx_end
     
     lambda = l;

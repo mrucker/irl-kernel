@@ -141,7 +141,7 @@ end
 
 function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, x, ff, verbosity, varargin)    
     o_cnt = size(x,2);
-    f_cnt = size(x,1);
+    s_cnt = size(x,1);    
 
     vv = x'*ff*x;
 
@@ -152,9 +152,11 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
         else
             cvx_quiet(true);
         end
-        variables a(o_cnt);
+        variables a(o_cnt) b1 r1(s_cnt);
         maximize(sum(a) - 1/2*quad_form(a.*y, vv)) %dual problem
         subject to
+            %b1 == 1 - x(:,1)'*ff*x*(a.*y);
+            %r1 == ff*x*(a.*y) + b1;
             0 == a'*y;
             0 <= a;
     cvx_end
@@ -167,19 +169,6 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     b0 = mean(sl - sv'*ff*x*(a.*y)); %aka , -(a'*vv*(a.*y)/sum(a));
     rs = ff*x*(a.*y) + b0;
     
-    
-    %Useful to study kernel polynomials of degree 2. This is the new feature space we are working in.
-    %f_x = poly_f(x,1);
-    
-    %When working in higher dimensions I'm not sure this has any meaning. (such as polynomial kernels above 1).
-    %When working within the dimensions of x this is the normal to the hyperplane.
-    %f_w = f_x*(a.*y);
-    %f_m = 1/norm(f_w);
-    
-    
-    %b0 = sum(y - k(z, z)*(a.*y))/sum(a>0);
-    %b0 = (sum(y.*(a>0)) - sum(vv*(a.*y)))/sum(a>0);    
-
     %ds      = sign(y.*(vv*(a.*y) + b0));
     ds      = zeros(size(x,2),1);
     right   = sum(ds == 1);
@@ -195,8 +184,9 @@ function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
     f_cnt = size(s_mat,1);
     s_cnt = size(s_mat,2);
 
-    % Construct matrix.
-    
+    ssffss = s_mat'*ff*s_mat;
+    seffse = sE'*ff*sE;
+    seffss = sE'*ff*s_mat;
 
     % Solve optimization to determine lambda weights.
     cvx_begin
@@ -205,10 +195,9 @@ function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
         else
             cvx_quiet(true);
         end
-        variables s(f_cnt) l(s_cnt);
-        minimize(s'*ff*s + sE'*ff*sE - 2*sE'*ff'*s);
+        variables l(s_cnt);
+        minimize(l'*ssffss*l + seffse - 2*seffss*l);
         subject to
-            s == s_mat*l;
             l >= 0;
             1 == sum(l);
     cvx_end
@@ -285,21 +274,23 @@ function m = k(x1, x2, varargin)
     p = varargin{1};
     s = varargin{2};
     
-    %m = x1'*x2;
-    %m = kernel_poly(x1,x2,p);
-    m = parse(x1,x2, kernel_gaussian(s));
+    %m = x1'*x2;    
+    m = parse(x1,x2, kernel_poly(p));
+    %m = parse(x1, x2, @kernel_hamming);
+    %m = parse(x1, x2, @kernel_equality);
+    %m = parse(x1,x2, kernel_gaussian(s));
     %m = parse(x1,x2, kernel_exponential(s));    
     %m = parse(x1,x2, kernel_tanimoto_jaccard_coefficient());
 end
 
-function k = kernel_poly(x1, x2, p)
+function k = kernel_poly(p)
     
     assert( p > 0, 'What are you doing!?');
-
+    
     if p == 1
-        k = x1'*x2;
+        k = @(x1,x2) x1'*x2;
     else
-        k = power(x1'*x2 + ones(size(x1,2), size(x2,2)), p*ones(size(x1,2), size(x2,2)));
+        k = @(x1,x2) (kernel_hamming(x1,x2)/numel(x1) + 1)^p - (kernel_hamming(x1,x2)/numel(x1) + 1)^(p-3);
     end
 end
 
@@ -313,6 +304,14 @@ end
 
 function k = kernel_gaussian(s)
     k = @(x1,x2) exp(-sum_square(x1-x2)/s);
+end
+
+function k = kernel_hamming(x1, x2)   
+    k = x1'*x2 + (x1-1)'*(x2-1);
+end
+
+function k = kernel_equality(x1, x2)
+    k = all(x1 == x2);
 end
 
 function k = kernel_tanimoto_jaccard_coefficient()
