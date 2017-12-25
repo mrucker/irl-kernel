@@ -18,14 +18,14 @@ algorithm       = 'algorithm3';
 %algorithm       = 'firl';
 
 %all_features = bad features. true_features = perfect features. (0,0) = good features.
-algorithm_params = struct('all_features', 1, 'true_features',0 , 'epsilon', .00001, 'p', 19, 's', 1);
-mdp_model        = 'linearmdp';
+algorithm_params = struct('all_features', 1, 'true_features',0 , 'epsilon', .0001, 'p', 128, 's', .01);
+mdp_model        = 'standardmdp';%'linearmdp' (stochastic) or 'standardmdp' (deterministic)
 mdp              = 'gridworld';%sum(100*clock)
-mdp_params       = struct('n',10, 'determinism',1, 'seed',1000000, 'b',1, 'discount',.9);
-test_params      = struct('training_sample_lengths', 128, 'training_samples', 1000, 'verbosity',0);
+mdp_params       = struct('n',10, 'determinism',1, 'seed',1000005, 'b',1, 'discount',.9);
+test_params      = struct('training_sample_lengths', 5, 'training_samples', 10000, 'verbosity',0);
 
 test_result = runtest(algorithm, algorithm_params, mdp_model, mdp, mdp_params, test_params);
 
-% Visualize solution.
+%Visualize solution.
 printresult(test_result);
 visualize(test_result, 1, algorithm, algorithm_params);

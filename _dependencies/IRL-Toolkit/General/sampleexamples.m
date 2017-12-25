@@ -7,12 +7,12 @@ T = test_params.training_sample_lengths;
 example_samples = cell(N,T);
 
 % Sample trajectories.
-for i=1:N,
+for i=1:N
     % Sample initial state.
     s = ceil(rand(1,1)*mdp_data.states);
     
     % Run sample trajectory.
-    for t=1:T,
+    for t=1:T
         % Compute optimal action for current state.
         a = feval(strcat(mdp_model,'action'),mdp_data,mdp_solution,s);
         

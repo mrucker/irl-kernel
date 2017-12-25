@@ -44,6 +44,7 @@ for y=crop(2,1):crop(2,2)
     end
 end
 
+
 if iscell(g)
     % g contains example traces - just draw those.
     for i=1:size(g,1)
@@ -58,7 +59,7 @@ if iscell(g)
             gridworlddrawagent(x-crop(1,1)+1,y-crop(2,1)+1,a,[1,1,1],1);
         end
     end
-else
+elseif ~isempty(p) && ~isempty(g)
     % Convert p to action mode.
     if size(p,2) ~= 1
         [~,p] = max(p,[],2);
