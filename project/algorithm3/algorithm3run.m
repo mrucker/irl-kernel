@@ -136,7 +136,7 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     rd = r(:,1)'*x(:,1) - r(:,1)'*x(:,idx);
     
     if verbosity ~= 0
-        fprintf(1,'Completed IRL iteration,i=%d, t=%f, g=%d, b=%d, u=%d, rd=%f\n',idx,m,0,0,i,rd);
+        fprintf(1,'FINISHED IRL,i=%d, t=%f, g=%d, b=%d, u=%d, rd=%f\n',idx,m,0,0,i,rd);
     end
     
     %irl_result = marshallResults(rs{idx}, ws{idx}, mdp_model, mdp_data, time);
@@ -357,7 +357,7 @@ function m = k(x1, x2, varargin)
     %m = parse(x1, x2, @kernel_hamming);
     %m = parse(x1, x2, @kernel_equality);
     %m = parse(x1,x2, kernel_gaussian(s));
-    m = parse(x1,x2, kernel_exponential(s));    
+    m = parse(x1,x2, kernel_exponential(s, @(x1,x2) norm(x1-x2))); %kernel_hamming_inverse
     %m = parse(x1,x2, kernel_tanimoto_jaccard_coefficient());
     %m = parse(x1,x2, @(x1, x2) k1(x1,x2) + k2(x1,x2));
 end
@@ -377,8 +377,8 @@ function k = kernel_sigmoid()
     k = @(x1,x2) tanh(x1'*x2);
 end
 
-function k = kernel_exponential(s)
-    k = @(x1,x2) exp(-norm(x1-x2)/s);
+function k = kernel_exponential(s, distance)
+    k = @(x1,x2) exp(-distance(x1,x2)/s);
 end
 
 function k = kernel_gaussian(s)
@@ -387,6 +387,9 @@ end
 
 function k = kernel_hamming(x1, x2)   
     k = x1'*x2 + (x1-1)'*(x2-1);
+end
+function k = kernel_hamming_inverse(x1, x2)   
+    k = abs(x1'*x2 + (x1-1)'*(x2-1) - numel(x1));
 end
 
 function k = kernel_equality(x1, x2)

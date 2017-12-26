@@ -1,0 +1,11 @@
+Do the math on complexity analysis for the algorithm
+Do the math on how to incorporate bayesian priors into feature expectations
+Improve our feature expectation calculations
+Incoporate regularization into the RKHS space
+Explore SVM regression to place confidence bounds
+
+Determine performance bounds?
+    Look into research on statistical learning theory with SVMs
+    
+Improve SVM optimization algorithm
+Improve the kernel or explore kernels more
