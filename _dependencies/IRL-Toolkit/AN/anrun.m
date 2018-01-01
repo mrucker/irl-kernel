@@ -19,7 +19,9 @@ function irl_result = anrun(algorithm_params,mdp_data,mdp_model,...
 algorithm_params = andefaultparams(algorithm_params);
 
 % Set random seed.
-rand('seed',algorithm_params.seed);
+    if algorithm_params.seed ~= 0
+        rng(algorithm_params.seed);
+    end
 tic;
 
 % Initialize variables.
@@ -59,6 +61,7 @@ Fmu = F*muE;
 
 % Generate random policy.
 w = rand(features,1);
+
 r = repmat(F'*w,1,actions);
 soln = standardmdpsolve(mdp_data,r);
 weights = {w};
@@ -110,7 +113,7 @@ while 1,
     solutions{itr} = soln;
     
     % Check convergence.
-    if (abs(t-told) <= 0.0001),
+    if (abs(t-told) <= algorithm_params.epsilon),
         break;
     end;
     

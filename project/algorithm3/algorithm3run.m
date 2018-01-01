@@ -31,7 +31,7 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     % Build feature membership matrix.
     if algorithm_params.all_features
         F = feature_data.splittable;
-        F = horzcat(F,ones(states,1)); %We add a row of 1s to the feature matrix to ensure we can control the reward at every state                
+        %F = horzcat(F,ones(states,1)); %We add a row of 1s to the feature matrix to ensure we can control the reward at every state                
     elseif algorithm_params.true_features
         F = true_features;
     else
@@ -56,69 +56,57 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     end
     
     nE = nE/N;
-    sE = sE/N;
+    sE = sE/N;        
+
+    true_r = algorithm_params.true_r;
+    true_p = standardmdpsolve(mdp_data, true_r);
+    sE2    = standardmdpfrequency(mdp_data, true_p);    
+
+    draw(sE, sE2);
     
-    draw(sE, nE);
-
-    %true_r = algorithm_params.true_r;
-    %true_p = standardmdpsolve(mdp_data, true_r);
-    %sE     = standardmdpfrequency(mdp_data, true_p);
-    mE     = F*sE;
-
     % Step 1
     rand_w = rand(features,1);
-    rand_w = rand_w/norm(rand_w); %not important to the algorithm, but this allows for comparisons against future w's.
     rand_r = repmat(F'*rand_w, 1, actions);
     rand_p = standardmdpsolve(mdp_data, rand_r);
-    rand_s = standardmdpfrequency(mdp_data, rand_p)/10;
-    rand_m = F*rand_s;
+    rand_s = standardmdpfrequency(mdp_data, rand_p);
 
     rs = {rand_r};
     ps = {rand_p};
-    ss = {rand_s};
-    ms = {rand_m};
+    ss = {rand_s};    
     ts = {0};    
 
     i = 2;
     
-    ff = k(F,F, algorithm_params.p, algorithm_params.s);
+    ff = k(F,F, algorithm_params);
+    ff = ff./ff(1,1);
     
     while 1
 
-        x = horzcat(sE, cell2mat(ss));        
+        ratio = sum(sE)/sum(ss{1});
+        %ratio = 1/10;
+        %ratio = 1;
+        x = horzcat(sE, cell2mat(ss)*ratio);
         y = vertcat(1,-ones(i-1,1));
-        
-        %Step 2
-        [m, g, b, u, r] = maxMarginOptimization_4_s(y, x, ff, verbosity);
 
-        rd = r'*x(:,1) - r'*x(:,i);
-        
-        % Print t.
-        if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration,i=%d, t=%f, g=%d, b=%d, u=%d, rd=%f\n',i,m,g,b,u,rd);
-        end
-                
+        [t, g, b, u, r] = maxMarginOptimization_4_s(y, x, ff, verbosity);
+
         rs{i} = repmat(r, 1, actions);
-        ts{i} = m;
+        ps{i} = standardmdpsolve(mdp_data, rs{i});
+        ss{i} = standardmdpfrequency(mdp_data, ps{i});
+        ts{i} = t;
         
-        %Step 3
+        rd = r'*(sE - ss{i});
+        
+        if verbosity ~= 0
+            fprintf(1,'Completed IRL iteration,i=%d, t=%f, g=%d, b=%d, u=%d, rd=%f\n',i,t,g,b,u,rd);
+        end
+        
         if (i==200 || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon)% || ts{i} <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
             break;
         end
 
-        %Step 4        
-        ps{i} = standardmdpsolve(mdp_data, rs{i});
-        ss{i} = standardmdpfrequency(mdp_data, ps{i})/10;        
-        ms{i}  = F*ss{i};
-
-        %Step 6
         i = i+1;
     end
-    
-    % Compute mu for last policy    
-    ps{i} = standardmdpsolve(mdp_data, rs{i});
-    ss{i} = standardmdpfrequency(mdp_data, ps{i})/10;
-    ms{i} = F*ss{i};
     
     idx = i;
     
@@ -126,20 +114,19 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    [~,idx] = max(mixPolicies_1(sE, ss, ff, verbosity));
+    [~,idx] = max(mixPolicies_1(sE, ss, rs, ff, verbosity));
     %[~,idx] = max(mixPolicies_2(mE, ms, ff, verbosity));
 
     time = toc;
     
-    m = ts{idx};
+    t = ts{idx};
     r = rs{idx};
-    rd = r(:,1)'*x(:,1) - r(:,1)'*x(:,idx);
+    rd = r(:,1)'*(sE - ss{idx});
     
     if verbosity ~= 0
-        fprintf(1,'FINISHED IRL,i=%d, t=%f, g=%d, b=%d, u=%d, rd=%f\n',idx,m,0,0,i,rd);
+        fprintf(1,'FINISHED IRL,i=%d, t=%f, g=%d, b=%d, u=%d, rd=%f\n',idx,t,0,0,i,rd);
     end
     
-    %irl_result = marshallResults(rs{idx}, ws{idx}, mdp_model, mdp_data, time);
     irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
 end
 
@@ -182,7 +169,7 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     margin  = 1/sqrt(sum(a));    
 end
 
-function [margin, right, wrong, unknown, reward] = maxMarginOptimization_5_s(y, x, ff, verbosity, varargin)    
+function [margin, right, wrong, unknown, reward] = maxMarginOptimization_5_s(y, x, ff, verbosity, varargin)
     o_cnt = size(x,2);
     s_cnt = size(x,1);    
 
@@ -226,16 +213,22 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_5_s(y, 
     margin  = 1/sqrt(sum(a));    
 end
 
-function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
+function [lambda] = mixPolicies_1(sE, ss, rs, ff, verbosity)
     s_mat = cell2mat(ss);
+    r_mat = cell2mat(rs);
+    r_mat = r_mat(:,1:5:size(r_mat,2));
     
     f_cnt = size(s_mat,1);
     s_cnt = size(s_mat,2);
-
+        
     ssffss = s_mat'*ff*s_mat;
     seffse = sE'*ff*sE;
     seffss = sE'*ff*s_mat;
-
+     
+    sd = diag(s_mat'*s_mat + sE'*sE - 2*s_mat'*sE);
+    fd = diag(ssffss + seffse - 2*seffss);
+    rd = diag(r_mat'*(sE - s_mat));
+    
     % Solve optimization to determine lambda weights.
     cvx_begin
         if verbosity == 2
@@ -250,7 +243,7 @@ function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
             1 == sum(l);
     cvx_end
     
-    lambda = l;
+    lambda = -abs(rd);
 end
 
 function [lambda] = mixPolicies_2(mE, ms, ff, verbosity)
@@ -332,71 +325,20 @@ end
 %Drawing
 
 %Kernels
-function m = parse(x1, x2, k)
-    m = zeros(size(x1,2),size(x2,2));
+function k = k(x1, x2, params)
+    p = params.p;
+    s = params.s;
+    c = 1;
+    n = size(x1,1);
+        
+    %b = k_dot();
+    %b = k_p(k_dot(),p,c);
+    %b = k_hamming();
+    %b = k_equal();
+    %b = k_gaussian(k_hamming(1),s);
+    b = k_exponential(k_hamming(1),s);
+    %b = k_anova(n);
     
-    x1 = x1';
-    
-    for c = 1:size(x2,2)
-        for r = 1:size(x1,1)
-            m(r,c) = k(x1(r,:)', x2(:,c));
-        end
-    end
-end
-
-function m = k(x1, x2, varargin)
-    p = varargin{1};
-    s = varargin{2};
-    
-    %k1 = kernel_gaussian(s);
-    %k2 = kernel_polynomial(p);
-    %k3 = @kernel_equality;
-    
-    %m = x1'*x2;    
-    %m = parse(x1,x2, kernel_polynomial(p));
-    %m = parse(x1, x2, @kernel_hamming);
-    %m = parse(x1, x2, @kernel_equality);
-    %m = parse(x1,x2, kernel_gaussian(s));
-    m = parse(x1,x2, kernel_exponential(s, @(x1,x2) norm(x1-x2))); %kernel_hamming_inverse
-    %m = parse(x1,x2, kernel_tanimoto_jaccard_coefficient());
-    %m = parse(x1,x2, @(x1, x2) k1(x1,x2) + k2(x1,x2));
-end
-
-function k = kernel_polynomial(p)
-    
-    assert( p > 0, 'What are you doing!?');
-    
-    if p == 1
-        k = @(x1,x2) x1'*x2;
-    else
-        k = @(x1,x2) 2^(-p)*(kernel_hamming(x1,x2)/numel(x1) + 1)^p;
-    end
-end
-
-function k = kernel_sigmoid()
-    k = @(x1,x2) tanh(x1'*x2);
-end
-
-function k = kernel_exponential(s, distance)
-    k = @(x1,x2) exp(-distance(x1,x2)/s);
-end
-
-function k = kernel_gaussian(s)
-    k = @(x1,x2) exp(-sum_square(x1-x2)/s);
-end
-
-function k = kernel_hamming(x1, x2)   
-    k = x1'*x2 + (x1-1)'*(x2-1);
-end
-function k = kernel_hamming_inverse(x1, x2)   
-    k = abs(x1'*x2 + (x1-1)'*(x2-1) - numel(x1));
-end
-
-function k = kernel_equality(x1, x2)
-    k = all(x1 == x2);
-end
-
-function k = kernel_tanimoto_jaccard_coefficient()
-    k = @(x1,x2) (x1'*x2)/(x1'*x2 + sum(abs(x1-x2)));
+    k = b(x1,x2);
 end
 %Kernels
