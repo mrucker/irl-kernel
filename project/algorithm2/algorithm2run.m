@@ -42,8 +42,11 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     
     F = F';
     F_0 = F; 
-    F = poly_f(F,2); %convert to the feature space of our kernel
+    F = poly_f(F,2)./2; %convert to the feature space of our kernel
 
+    ff = k(F_0,F_0, algorithm_params);
+    ff = ff./ff(1,1);
+    
     features = size(F,1);
 
     % Construct state expectations.
@@ -65,8 +68,8 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     % Step 1
     rand_w = rand(size(F_0,1),1);
     rand_w = rand_w/norm(rand_w); %not important to the algorithm, but this allows for comparisons against future w's.
-    rand_r = repmat(F_0*rand_w, 1, actions);
-    rand_p = standardmdpsolve(mdp_data, rand_r);
+    rand_r = F_0'*rand_w;
+    rand_p = standardmdpsolve(mdp_data, repmat(rand_r, 1, actions));
     rand_s = standardmdpfrequency(mdp_data, rand_p);
     rand_m = F*rand_s;
 
@@ -83,22 +86,21 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
         m_cnt = i-1;
         f_cnt = size(mE,1);
 
-        v = horzcat(mE, cell2mat(ms));
-        s = horzcat(sE, cell2mat(ss));
+        mx = horzcat(mE, cell2mat(ms));
+        sx = horzcat(sE, cell2mat(ss));
         y = vertcat(1,-ones(m_cnt,1));
         
         
         %Step 2
-        [m, r, w, ~, d] = maxMarginOptimization_4_s(y, v, verbosity, 1);
-        [m1, r1, w1, ~, d1] = maxMarginOptimization_4_b(y, s, F_0, verbosity, 2);
+        [m0,g0,b0,u0,r0] = maxMarginOptimization_1_h(y, mx, F, verbosity);
+        [m1,g1,b1,u1,r1] = maxMarginOptimization_4_s(y, sx, ff, mx, F, verbosity);
         
-        % Print t.
+        rs{i} = r1;
+        ts{i} = m1;
+
         if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration, t=%f, r=%d, w=%d\n',m,r,w);
+            fprintf(1,'Completed IRL iteration, t=%f\n',ts{i});
         end
-                
-        rs{i} = repmat(d(F), 1, actions);
-        ts{i} = m;
         
         %Step 3
         if (ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
@@ -106,8 +108,8 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
         end
 
         %Step 4        
-        ps{i} = standardmdpsolve(mdp_data, rs{i});
-        ss{i} = standardmdpfrequency(mdp_data, ps{i});        
+        ps{i} = standardmdpsolve(mdp_data, repmat(rs{i}, 1, actions));
+        ss{i} = standardmdpfrequency(mdp_data, ps{i});
         ms{i}  = F*ss{i};
 
         %Step 6
@@ -123,7 +125,8 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    [~,idx] = max(mixPolicies(mE, ms, verbosity));
+    ls = mixPolicies(mE, ms, verbosity);
+    [~,idx] = max(ls);
 
     time = toc;
     
@@ -136,138 +139,91 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
 end
 
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_1_h(y, x, verbosity, varargin)
-    f_cnt = size(x,1);
-    o_cnt = size(x,2);
+function [margin, right, wrong, unknown, reward] = maxMarginOptimization_1_h(y, mx, f, verbosity, varargin)
+    f_cnt = size(mx,1);
+    o_cnt = size(mx,2);
         
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
+        cvx_quiet(true);
         variables m w(f_cnt);
         maximize(m);
         subject to
             1 >= norm(w);
-            m <= y.*(x'*w);
+            m <= y.*(mx'*w);
     cvx_end
     warning('off','all')
+        
+    %ds = y.*(x'*w);
+    ds = zeros(size(mx,2),1);
     
-    dk = @(x) (x'*w);
-    ds = y.*(x'*w);
-
     margin  = m;
     right   = sum(sign(ds) == 1);
     wrong   = sum(sign(ds) == -1);
     unknown = sum(sign(ds) == 0);
+    reward  = f'*w;
 end
 
-%First iteration solving the lagrangian dual and using polynomial kernels
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_s(y, x, verbosity, p)
-    f_cnt = size(x,1);
-    o_cnt = size(x,2);
+function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, sx, ff, mx, f, verbosity, varargin)
+    o_cnt = size(sx,2);
+    s_cnt = size(sx,1);
+    %f_cnt = size(mx,1);
 
-    if p == 1
-        k = @(x1,x2) x1'*x2;
-    else
-        k = @(x1,x2) power(x1'*x2 + ones(size(x1,2), size(x2,2)), p*ones(size(x1,2), size(x2,2)));
-    end
+    vv = sx'*ff*sx;
     
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables bb a(o_cnt);
-        maximize(sum(a) - 1/2*quad_form(a.*y, k(x,x))) %dual problem
+        cvx_quiet(true);
+        variables a1(o_cnt);
+        maximize(sum(a1) - 1/2*quad_form(a1.*y, vv)) %dual problem
         subject to
-            0 == a'*y;
-            0 <= a;
+            %0 == a1'*y;
+            0 <= a1;
     cvx_end
     warning('off','all')
-    
-    %Useful to study kernel polynomials of degree 2. This is the new feature space we are working in.
-    %f_x = poly_f(x,1);
-    
-    %When working in higher dimensions I'm not sure this has any meaning. (such as polynomial kernels above 1).
-    %When working within the dimensions of x this is the normal to the hyperplane.
-    %f_w = f_x*(a.*y);
-    %f_m = 1/norm(f_w);
-    
-    %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
-    b0 = sum(y - k(x, x)'*(a.*y))/sum(a>0);
-    
-    dk = @(xk) k(xk,x)*(a.*y) + b0;
-    ds = y.*dk(x);
-        
-    margin  = 1/sqrt(sum(a));
-    right   = sum(sign(ds) == 1);
-    wrong   = sum(sign(ds) == -1);
-    unknown = sum(sign(ds) == 0);
-end
 
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_b(y, x, F, verbosity, p)
-    f_cnt = size(x,1);
-    o_cnt = size(x,2);
+%     cvx_begin
+%         cvx_quiet(true);
+%         variables a2(o_cnt);
+%         maximize(sum(a2) - 1/2*quad_form(a2.*y, vv)) %dual problem
+%         subject to
+%             0 == a2'*y;
+%             0 <= a2;
+%     cvx_end
+%     warning('off','all')
+%         
+%     warning('off','all')
+%     cvx_begin
+%         cvx_quiet(true);
+%         variables m w(f_cnt);
+%         maximize(m);
+%         subject to
+%             1 >= norm(w);
+%             m <= y.*(mx'*w);
+%     cvx_end
+%     warning('off','all')
     
-    if p == 1
-        k = @(x1,x2) x1'*x2;
-    else
-        k = @(x1,x2) power(x1'*x2 + 1*ones(size(x1,2), size(x2,2)), p*ones(size(x1,2), size(x2,2)));
-    end
-    
-    z = x'*k(F,F)*x;
-    
-    warning('off','all')
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables a(o_cnt);
-        maximize(sum(a) - 1/2*quad_form(a.*y, z)) %dual problem
-        subject to
-            0 == a'*y;
-            0 <= a;
-    cvx_end
-    warning('off','all')
-    
-    %Useful to study kernel polynomials of degree 2. This is the new feature space we are working in.
-    %f_x = poly_f(x,1);
-    
-    %When working in higher dimensions I'm not sure this has any meaning. (such as polynomial kernels above 1).
-    %When working within the dimensions of x this is the normal to the hyperplane.
-    %f_w = f_x*(a.*y);
-    %f_m = 1/norm(f_w);
+    sv = sx(:,round(a1,8)>0);
+    sl = y(round(a1,8)>0,1);
     
     %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
-    %b0 = sum(y - k(z, z)*(a.*y))/sum(a>0);
-    b0 = (sum(y.*(a>0)) - sum(z*(a.*y)))/sum(a>0);
+    b0 = mean(sl - sv'*ff*sx*(a1.*y)); %aka , -(a'*vv*(a.*y)/sum(a));
+    rs = ff*sx*(a1.*y)+b0;
     
-    dk = @(m) k(m,F)*x*(a.*y) + b0;
-    ds = sign(y.*(z*(a.*y) + b0));
-        
-    margin  = 1/sqrt(sum(a));
+    %ds      = sign(y.*(vv*(a.*y) + b0));
+    ds      = zeros(size(sx,2),1);
     right   = sum(ds == 1);
     wrong   = sum(ds == -1);
     unknown = sum(ds == 0);
+    reward  = rs;
+    margin  = 1/sqrt(sum(a1));
 end
 
 function [lambda] = mixPolicies(mE, ms, verbosity)
 
-    f_cnt = size(ms{1},1);
-    m_cnt = size(ms,2);
-
-    % Construct matrix.
-    m_mat = zeros(f_cnt,m_cnt);
-    for j=1:m_cnt
-        m_mat(:,j) = ms{j};
-    end
+    f_cnt = size(mE,1);
+    m_cnt = size(ms,2);    
+    m_mat = cell2mat(ms);
 
     % Solve optimization to determine lambda weights.
     cvx_begin
@@ -281,7 +237,7 @@ function [lambda] = mixPolicies(mE, ms, verbosity)
         minimize(norm(m-mE));
         subject to            
             m == m_mat*l;
-            l >= zeros(m_cnt,1);
+            l >= 0;
             1 >= norm(l,1);
             1 == ones(m_cnt,1)'*l;
     cvx_end
@@ -338,4 +294,21 @@ function features = poly_f(F, p)
             features = horzcat(features, vertcat(n1, n2, n3, n4));
         end
     end
+end
+
+function k = k(x1, x2, params)
+    p = params.p;
+    s = params.s;
+    c = 1;
+    n = size(x1,1);
+        
+    %b = k_dot();
+    b = k_polynomial(k_dot(),p,c);
+    %b = k_hamming();
+    %b = k_equal(k_norm());
+    %b = k_gaussian(k_norm(),s);
+    %b = k_exponential(k_norm(),s);
+    %b = k_anova(n);
+    
+    k = b(x1,x2);
 end

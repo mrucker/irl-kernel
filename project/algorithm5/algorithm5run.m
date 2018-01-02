@@ -44,7 +44,7 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     sE = sE/N;
     mE = F*sE;
 
-    %draw(sE, nE);
+    draw(sE, nE);
     
     % Generate random policy.
     rand_w = rand(features,1);
@@ -121,12 +121,14 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
 
     end;
 
+    idx = i;
+    
     % Solve optimization to determine lambda weights.
     % In Abbeel & Ng's algorithm, we should use the weights lambda to construct
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    [~,idx] = max(mixPolicies_1(sE, ss, ff, verbosity));
+    %[~,idx] = max(mixPolicies_1(sE, ss, ff, rs, verbosity));
     %[~,idx] = max(mixPolicies_2(mE, ms, ff, verbosity));
 
     time = toc;
@@ -142,8 +144,10 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
 end
 
-function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
+function [lambda] = mixPolicies_1(sE, ss, ff, rs, verbosity)
     s_mat = cell2mat(ss);
+    r_mat = cell2mat(rs);
+    r_mat = r_mat(:,1:5:size(r_mat,2));
     
     f_cnt = size(s_mat,1);
     s_cnt = size(s_mat,2);
@@ -151,6 +155,10 @@ function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
     ssffss = s_mat'*ff*s_mat;
     seffse = sE'*ff*sE;
     seffss = sE'*ff*s_mat;
+    
+    sd = diag(s_mat'*s_mat + sE'*sE - 2*s_mat'*sE).^(1/2);
+    fd = diag(ssffss + seffse - 2*seffss).^(1/2);
+    rd = abs(diag(r_mat'*(sE - s_mat)));
 
     % Solve optimization to determine lambda weights.
     cvx_begin
@@ -167,6 +175,9 @@ function [lambda] = mixPolicies_1(sE, ss, ff, verbosity)
     cvx_end
     
     lambda = l;
+    %lambda = -sd;
+    %lambda = -fd;
+    %lambda = -rd;
 end
 
 function [lambda] = mixPolicies_2(mE, ms, ff, verbosity)
@@ -247,15 +258,15 @@ end
 function k = k(x1, x2, params)
     p = params.p;
     s = params.s;
-    c = 1;
+    c = 1.1;
     n = size(x1,1);
         
     b = k_dot();
-    %b = k_p(k_dot(),p,c);
-    %b = k_hamming();
-    %b = k_equal();
-    %b = k_gaussian(k_hamming(1),s);
-    %b = k_exponential(k_hamming(1),s);
+    %b = k_polynomial(k_dot(),p,c);
+    %b = k_hamming(0);
+    %b = k_equal(k_norm());
+    %b = k_gaussian(k_norm(),s);
+    %b = k_exponential(k_norm(),s);
     %b = k_anova(n);
     
     k = b(x1,x2);

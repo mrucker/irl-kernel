@@ -31,7 +31,7 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     % Build feature membership matrix.
     if algorithm_params.all_features
         F = feature_data.splittable;
-        %F = horzcat(F,ones(states,1)); %We add a row of 1s to the feature matrix to ensure we can control the reward at every state                
+        F = horzcat(F,ones(states,1)); %We add a row of 1s to the feature matrix to ensure we can control the reward at every state                
     elseif algorithm_params.true_features
         F = true_features;
     else
@@ -58,16 +58,16 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     nE = nE/N;
     sE = sE/N;        
 
-    true_r = algorithm_params.true_r;
-    true_p = standardmdpsolve(mdp_data, true_r);
-    sE2    = standardmdpfrequency(mdp_data, true_p);    
+    %true_r = algorithm_params.true_r;
+    %true_p = standardmdpsolve(mdp_data, true_r);
+    %sE2    = standardmdpfrequency(mdp_data, true_p);    
 
-    draw(sE, sE2);
+    %draw(sE, sE2, 'Discounted Visits', 'True Frequency');
     
     % Step 1
     rand_w = rand(features,1);
-    rand_r = repmat(F'*rand_w, 1, actions);
-    rand_p = standardmdpsolve(mdp_data, rand_r);
+    rand_r = F'*rand_w;
+    rand_p = standardmdpsolve(mdp_data, repmat(rand_r, 1, actions));
     rand_s = standardmdpfrequency(mdp_data, rand_p);
 
     rs = {rand_r};
@@ -82,52 +82,89 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     
     while 1
 
-        ratio = sum(sE)/sum(ss{1});
+        %ratio = sum(sE)/sum(ss{1});
         %ratio = 1/10;
-        %ratio = 1;
-        x = horzcat(sE, cell2mat(ss)*ratio);
+        ratio = 1;
+        x = horzcat(sE, cell2mat(ss));
         y = vertcat(1,-ones(i-1,1));
 
-        [t, g, b, u, r] = maxMarginOptimization_4_s(y, x, ff, verbosity);
+        %[t1, g1, b1, u1, r1] = maxMarginOptimization_1_h(y, x, ff, verbosity);
+        [t, g, b, u, r]      = maxMarginOptimization_4_s(y, x, ff, verbosity);
 
-        rs{i} = repmat(r, 1, actions);
-        ps{i} = standardmdpsolve(mdp_data, rs{i});
+        rs{i} = r;
+        ps{i} = standardmdpsolve(mdp_data, repmat(rs{i}, 1, actions));
         ss{i} = standardmdpfrequency(mdp_data, ps{i});
-        ts{i} = t;
+        ts{i} = t;        
         
         rd = r'*(sE - ss{i});
         
         if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration,i=%d, t=%f, g=%d, b=%d, u=%d, rd=%f\n',i,t,g,b,u,rd);
+            fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,t);
         end
         
-        if (i==200 || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon)% || ts{i} <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
+        %Running for too long after converging causes the selection of features weights at the end to be very problematic.
+        %It is much better, in general, to exit quickly after convergence than to keep toiling away.
+        %In other words, the final result is very sensitive to exit conditions.
+        if (ts{i} <= algorithm_params.epsilon || abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon || (i > 2 && ts{i}-ts{i-1} > ts{i-1}*2))
             break;
         end
 
         i = i+1;
     end
     
+    x = horzcat(sE, cell2mat(ss)*ratio);
+    y = vertcat(1,-ones(i-1,1));
     idx = i;
     
     % In Abbeel & Ng's algorithm, we should use the weights lambda to construct
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    [~,idx] = max(mixPolicies_1(sE, ss, rs, ff, verbosity));
+    ls = mixPolicies_1(sE, ss, rs, ff, verbosity);
+    [~,idx] = max(ls);
     %[~,idx] = max(mixPolicies_2(mE, ms, ff, verbosity));
 
     time = toc;
     
     t = ts{idx};
     r = rs{idx};
-    rd = r(:,1)'*(sE - ss{idx});
     
     if verbosity ~= 0
-        fprintf(1,'FINISHED IRL,i=%d, t=%f, g=%d, b=%d, u=%d, rd=%f\n',idx,t,0,0,i,rd);
+        fprintf(1,'FINISHED IRL, i=%d, t=%f\n',idx,t);
     end
     
-    irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
+    draw(sE, ss{idx}, 'sE', 'ss{idx}');
+    
+    irl_result = marshallResults(repmat(r, 1, actions), 0, mdp_model, mdp_data, time);
+end
+
+function [margin, right, wrong, unknown, reward] = maxMarginOptimization_1_h(y, x, ff, verbosity, varargin)
+    f_cnt = size(x,1);
+    o_cnt = size(x,2);
+        
+    warning('off','all')
+    cvx_begin
+        if verbosity == 2
+            cvx_quiet(false);
+        else
+            cvx_quiet(true);
+        end
+        variables m w(f_cnt) b0;
+        maximize(m);
+        subject to
+            1 >= norm(w);
+            m <= y.*(x'*w);
+    cvx_end
+    warning('off','all')
+    
+    dk = @(x) (x'*w);
+    ds = y.*(x'*w);
+
+    margin  = m;
+    right   = sum(sign(ds) == 1);
+    wrong   = sum(sign(ds) == -1);
+    unknown = sum(sign(ds) == 0);
+    reward  = ff'*w;
 end
 
 function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, x, ff, verbosity, varargin)
@@ -138,17 +175,13 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
 
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables a(o_cnt) b1 r1(s_cnt);
+        cvx_quiet(true);
+        variables a(o_cnt);
         maximize(sum(a) - 1/2*quad_form(a.*y, vv)) %dual problem
         subject to
-            %b1 == 1 - x(:,1)'*ff*x*(a.*y);
-            %r1 == ff*x*(a.*y) + b1;
-            0 == a'*y;
+        %I don't understand it, but this constraint seems to make things worse. I ran about 20 tests with and without it to confirm.
+        %It doesn't always make it worse, but when it does it results in a catastrophic failure.
+        %0 == a'*y; 
             0 <= a;
     cvx_end
     warning('off','all')
@@ -157,8 +190,8 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     sl = y(round(a,8)>0,1);
     
     %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
-    b0 = mean(sl - sv'*ff*x*(a.*y)); %aka , -(a'*vv*(a.*y)/sum(a));
-    rs = ff*x*(a.*y) + b0;
+    b0 = mean(sl - sv'*ff*x*(a.*y)); %aka , -(a'*vv*(a.*y)/sum(a)); Doesn't seem to make a difference to performance
+    rs = ff*x*(a.*y);
     
     %ds      = sign(y.*(vv*(a.*y) + b0));
     ds      = zeros(size(x,2),1);
@@ -166,7 +199,7 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     wrong   = sum(ds == -1);
     unknown = sum(ds == 0);
     reward  = rs;
-    margin  = 1/sqrt(sum(a));    
+    margin  = (1/sqrt(sum(a)));
 end
 
 function [margin, right, wrong, unknown, reward] = maxMarginOptimization_5_s(y, x, ff, verbosity, varargin)
@@ -215,8 +248,7 @@ end
 
 function [lambda] = mixPolicies_1(sE, ss, rs, ff, verbosity)
     s_mat = cell2mat(ss);
-    r_mat = cell2mat(rs);
-    r_mat = r_mat(:,1:5:size(r_mat,2));
+    r_mat = cell2mat(rs);    
     
     f_cnt = size(s_mat,1);
     s_cnt = size(s_mat,2);
@@ -225,17 +257,13 @@ function [lambda] = mixPolicies_1(sE, ss, rs, ff, verbosity)
     seffse = sE'*ff*sE;
     seffss = sE'*ff*s_mat;
      
-    sd = diag(s_mat'*s_mat + sE'*sE - 2*s_mat'*sE);
-    fd = diag(ssffss + seffse - 2*seffss);
-    rd = diag(r_mat'*(sE - s_mat));
+    %sd = diag(s_mat'*s_mat + sE'*sE - 2*s_mat'*sE); Didn't seem to work well
+    %fd = diag(ssffss + seffse - 2*seffss); Didn't seem to work well
+    %rd = diag(r_mat'*(sE - s_mat)); Didn't seem to work well
     
     % Solve optimization to determine lambda weights.
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
+        cvx_quiet(true);
         variables l(s_cnt);
         minimize(l'*ssffss*l + seffse - 2*seffss*l);
         subject to
@@ -243,7 +271,7 @@ function [lambda] = mixPolicies_1(sE, ss, rs, ff, verbosity)
             1 == sum(l);
     cvx_end
     
-    lambda = -abs(rd);
+    lambda = l;
 end
 
 function [lambda] = mixPolicies_2(mE, ms, ff, verbosity)
@@ -299,7 +327,7 @@ function irl_result = marshallResults(r, w, mdp_model, mdp_data, time)
 end
 
 %Drawing
-function draw(r1, r2)
+function draw(r1, r2, t1, t2)
 
 n = sqrt(size(r1,1));
 
@@ -311,12 +339,12 @@ cla;
 
 % Draw reward for ground truth.
 subplot(1,2,1);
-title('Discounted Visits');
+title(t1);
 feval(strcat('gridworld','draw'), r1, [], [], struct('n',n));
 
 % Draw reward for IRL result.
 subplot(1,2,2);
-title('True Visits');
+title(t2);
 feval(strcat('gridworld','draw'), r2, [], [], struct('n',n));
 
 % Turn hold off.
@@ -328,16 +356,25 @@ end
 function k = k(x1, x2, params)
     p = params.p;
     s = params.s;
-    c = 1;
+    c = params.c;
     n = size(x1,1);
         
-    %b = k_dot();
-    %b = k_p(k_dot(),p,c);
-    %b = k_hamming();
-    %b = k_equal();
-    %b = k_gaussian(k_hamming(1),s);
-    b = k_exponential(k_hamming(1),s);
-    %b = k_anova(n);
+    switch params.k
+        case 1
+            b = k_dot();
+        case 2
+            b = k_polynomial(k_hamming(0),p,c);
+        case 3
+            b = k_hamming();
+        case 4
+            b = k_equal(k_norm());
+        case 5
+            b = k_gaussian(k_norm(),s);
+        case 6
+            b = k_exponential(k_norm(),s);
+        case 7
+            b = k_anova(n);
+    end
     
     k = b(x1,x2);
 end
