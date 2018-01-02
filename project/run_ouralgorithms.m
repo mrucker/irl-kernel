@@ -13,7 +13,7 @@ algorithm       = 'algorithm3';
 %algorithm       = 'firl';
 
 %all_features = bad features. true_features = perfect features. (0,0) = good features.
-algorithm_params = struct('all_features',1 , 'true_features',0 , 'epsilon', .0001, 'k',6, 'p', 2, 's',3, 'c', 1);
+algorithm_params = struct('all_features',1 , 'true_features',0 , 'epsilon', .0001, 'k',6, 'p', 2, 's',.001, 'c', 1);
 mdp_model        = 'linearmdp';%'linearmdp' (stochastic) or 'standardmdp' (deterministic)
 mdp              = 'gridworld';%sum(100*clock)
 mdp_params       = struct('n',16, 'determinism',1, 'seed',sum(100*clock), 'b',1, 'discount',.9);
