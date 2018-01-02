@@ -44,8 +44,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     F_0 = F; 
     F = poly_f(F,2)./2; %convert to the feature space of our kernel
 
-    ff = k(F_0,F_0, algorithm_params);
-    ff = ff./ff(1,1);
+    ff = k(F_0,F_0, algorithm_params);    
     
     features = size(F,1);
 
@@ -66,9 +65,7 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
     mE     = F*sE;
 
     % Step 1
-    rand_w = rand(size(F_0,1),1);
-    rand_w = rand_w/norm(rand_w); %not important to the algorithm, but this allows for comparisons against future w's.
-    rand_r = F_0'*rand_w;
+    rand_r = rand(states,1);
     rand_p = standardmdpsolve(mdp_data, repmat(rand_r, 1, actions));
     rand_s = standardmdpfrequency(mdp_data, rand_p);
     rand_m = F*rand_s;
@@ -88,12 +85,11 @@ function irl_result = algorithm2run(algorithm_params, mdp_data, mdp_model, featu
 
         mx = horzcat(mE, cell2mat(ms));
         sx = horzcat(sE, cell2mat(ss));
-        y = vertcat(1,-ones(m_cnt,1));
-        
+        y = vertcat(1,-ones(m_cnt,1));        
         
         %Step 2
-        [m0,g0,b0,u0,r0] = maxMarginOptimization_1_h(y, mx, F, verbosity);
-        [m1,g1,b1,u1,r1] = maxMarginOptimization_4_s(y, sx, ff, mx, F, verbosity);
+        [m0,~,~,~,r0] = maxMarginOptimization_1_h(y, mx, F);
+        [m1,~,~,~,r1] = maxMarginOptimization_4_s(y, sx, ff, mx, F);
         
         rs{i} = r1;
         ts{i} = m1;
@@ -146,7 +142,7 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_1_h(y, 
     warning('off','all')
     cvx_begin
         cvx_quiet(true);
-        variables m w(f_cnt);
+        variables m w(f_cnt) b0;
         maximize(m);
         subject to
             1 >= norm(w);
@@ -299,16 +295,25 @@ end
 function k = k(x1, x2, params)
     p = params.p;
     s = params.s;
-    c = 1;
+    c = params.c;
     n = size(x1,1);
         
-    %b = k_dot();
-    b = k_polynomial(k_dot(),p,c);
-    %b = k_hamming();
-    %b = k_equal(k_norm());
-    %b = k_gaussian(k_norm(),s);
-    %b = k_exponential(k_norm(),s);
-    %b = k_anova(n);
+    switch params.k
+        case 1
+            b = k_dot();
+        case 2
+            b = k_polynomial(k_dot(),p,c);
+        case 3
+            b = k_hamming();
+        case 4
+            b = k_equal(k_norm());
+        case 5
+            b = k_gaussian(k_hamming(0),s);
+        case 6
+            b = k_exponential(k_hamming(0),s);
+        case 7
+            b = k_anova(n);
+    end
     
     k = b(x1,x2);
 end

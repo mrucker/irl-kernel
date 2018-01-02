@@ -24,7 +24,7 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     tic;
 
     % Initialize variables.
-    [states,actions,transitions] = size(mdp_data.sa_p);
+    [states,actions,~] = size(mdp_data.sa_p);
 
     [N,T] = size(example_samples);            
 
@@ -65,8 +65,7 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     %draw(sE, sE2, 'Discounted Visits', 'True Frequency');
     
     % Step 1
-    rand_w = rand(features,1);
-    rand_r = F'*rand_w;
+    rand_r = rand(states,1);
     rand_p = standardmdpsolve(mdp_data, repmat(rand_r, 1, actions));
     rand_s = standardmdpfrequency(mdp_data, rand_p);
 
@@ -77,14 +76,10 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
 
     i = 2;
     
-    ff = k(F,F, algorithm_params);
-    ff = ff./ff(1,1);
+    ff = k(F,F, algorithm_params);    
     
     while 1
 
-        %ratio = sum(sE)/sum(ss{1});
-        %ratio = 1/10;
-        ratio = 1;
         x = horzcat(sE, cell2mat(ss));
         y = vertcat(1,-ones(i-1,1));
 
@@ -112,15 +107,13 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
         i = i+1;
     end
     
-    x = horzcat(sE, cell2mat(ss)*ratio);
-    y = vertcat(1,-ones(i-1,1));
     idx = i;
     
     % In Abbeel & Ng's algorithm, we should use the weights lambda to construct
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    ls = mixPolicies_1(sE, ss, rs, ff, verbosity);
+    ls = mixPolicies_1(sE, ss, rs, ff);
     [~,idx] = max(ls);
     %[~,idx] = max(mixPolicies_2(mE, ms, ff, verbosity));
 
@@ -138,36 +131,7 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
     irl_result = marshallResults(repmat(r, 1, actions), 0, mdp_model, mdp_data, time);
 end
 
-function [margin, right, wrong, unknown, reward] = maxMarginOptimization_1_h(y, x, ff, verbosity, varargin)
-    f_cnt = size(x,1);
-    o_cnt = size(x,2);
-        
-    warning('off','all')
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables m w(f_cnt) b0;
-        maximize(m);
-        subject to
-            1 >= norm(w);
-            m <= y.*(x'*w);
-    cvx_end
-    warning('off','all')
-    
-    dk = @(x) (x'*w);
-    ds = y.*(x'*w);
-
-    margin  = m;
-    right   = sum(sign(ds) == 1);
-    wrong   = sum(sign(ds) == -1);
-    unknown = sum(sign(ds) == 0);
-    reward  = ff'*w;
-end
-
-function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, x, ff, verbosity, varargin)
+function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, x, ff, varargin)
     o_cnt = size(x,2);
     s_cnt = size(x,1);    
 
@@ -202,51 +166,7 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     margin  = (1/sqrt(sum(a)));
 end
 
-function [margin, right, wrong, unknown, reward] = maxMarginOptimization_5_s(y, x, ff, verbosity, varargin)
-    o_cnt = size(x,2);
-    s_cnt = size(x,1);    
-
-    vv = x'*ff*x;
-
-    warning('off','all')
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables a(o_cnt) b1 r1(s_cnt) zi(s_cnt);
-        maximize(sum(a) - 1/2*quad_form(a.*y, vv)) %dual problem  - 1/50*sum(zi-min(zi))
-        subject to
-            %b1 == 1 - x(:,1)'*ff*x*(a.*y);
-            %0 == ff*x*(a.*y) + b1 + zi;
-            %0 <= zi;
-            0 == a'*y;
-            0 <= a;
-    cvx_end
-    warning('off','all')    
-    
-    %zi'-min(zi)
-    
-    sv = x(:,round(a,8)>0);
-    sl = y(round(a,8)>0,1);
-    
-    %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
-    b0 = mean(sl - sv'*ff*x*(a.*y)); %aka , -(a'*vv*(a.*y)/sum(a));
-    rs = ff*x*(a.*y) + b0;
-    
-    %rs'
-    
-    %ds      = sign(y.*(vv*(a.*y) + b0));
-    ds      = zeros(size(x,2),1);
-    right   = sum(ds == 1);
-    wrong   = sum(ds == -1);
-    unknown = sum(ds == 0);
-    reward  = rs;
-    margin  = 1/sqrt(sum(a));    
-end
-
-function [lambda] = mixPolicies_1(sE, ss, rs, ff, verbosity)
+function [lambda] = mixPolicies_1(sE, ss, rs, ff)
     s_mat = cell2mat(ss);
     r_mat = cell2mat(rs);    
     
@@ -267,30 +187,6 @@ function [lambda] = mixPolicies_1(sE, ss, rs, ff, verbosity)
         variables l(s_cnt);
         minimize(l'*ssffss*l + seffse - 2*seffss*l);
         subject to
-            l >= 0;
-            1 == sum(l);
-    cvx_end
-    
-    lambda = l;
-end
-
-function [lambda] = mixPolicies_2(mE, ms, ff, verbosity)
-    m_mat = cell2mat(ms);
-    
-    f_cnt = size(m_mat,1);
-    m_cnt = size(m_mat,2);
-    
-    % Solve optimization to determine lambda weights.
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables m(f_cnt) l(m_cnt);
-        minimize(norm(m-mE));
-        subject to
-            m == m_mat*l;
             l >= 0;
             1 == sum(l);
     cvx_end
@@ -363,15 +259,15 @@ function k = k(x1, x2, params)
         case 1
             b = k_dot();
         case 2
-            b = k_polynomial(k_hamming(0),p,c);
+            b = k_polynomial(k_hamming(1),p,c);
         case 3
             b = k_hamming();
         case 4
             b = k_equal(k_norm());
         case 5
-            b = k_gaussian(k_norm(),s);
+            b = k_gaussian(k_hamming(0),s);
         case 6
-            b = k_exponential(k_norm(),s);
+            b = k_exponential(k_hamming(0),s);
         case 7
             b = k_anova(n);
     end
