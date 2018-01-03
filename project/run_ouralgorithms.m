@@ -7,17 +7,17 @@ add_ourpaths; %includes all the paths required to run our code
 %algorithm       = 'mmpboost';
 %algorithm       = 'learch';
 algorithm       = 'an';
-algorithm       = 'algorithm3';
+%algorithm       = 'algorithm3';
 %algorithm       = 'algorithm5';
 %algorithm       = 'mmp';
 %algorithm       = 'firl';
 
 %all_features = bad features. true_features = perfect features. (0,0) = good features.
-algorithm_params = struct('all_features',1 , 'true_features',0 , 'epsilon', .0001, 'k',6, 'p', 2, 's',.001, 'c', 1);
+algorithm_params = struct('all_features',0 , 'true_features',1 , 'epsilon', .0001, 'k',6, 'p', 2, 's',.001, 'c', 1);
 mdp_model        = 'linearmdp';%'linearmdp' (stochastic) or 'standardmdp' (deterministic)
 mdp              = 'gridworld';%sum(100*clock)
-mdp_params       = struct('n',16, 'determinism',1, 'seed',sum(100*clock), 'b',1, 'discount',.9);
-test_params      = struct('training_sample_lengths', 2^3, 'training_samples', 2^10, 'verbosity',1);
+mdp_params       = struct('n',16, 'determinism',1, 'seed',sum(100*clock), 'b',4, 'discount',.9);
+test_params      = struct('training_sample_lengths', 2^4, 'training_samples', 2^10, 'verbosity',1);
 
 test_result = runtest(algorithm, algorithm_params, mdp_model, mdp, mdp_params, test_params);
 

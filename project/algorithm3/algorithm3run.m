@@ -126,7 +126,7 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
         fprintf(1,'FINISHED IRL, i=%d, t=%f\n',idx,t);
     end
     
-    draw(sE, ss{idx}, 'sE', 'ss{idx}');
+    %draw_visitation(sE, ss{idx}, 'sE', 'ss{idx}');
     
     irl_result = marshallResults(repmat(r, 1, actions), 0, mdp_model, mdp_data, time);
 end
@@ -223,7 +223,7 @@ function irl_result = marshallResults(r, w, mdp_model, mdp_data, time)
 end
 
 %Drawing
-function draw(r1, r2, t1, t2)
+function draw_visitation(r1, r2, t1, t2)
 
 n = sqrt(size(r1,1));
 

@@ -1,8 +1,17 @@
+add_ourpaths;
 
 %Y_Linearly_Seperable_Y_Centered();
 %N_Linearly_Seperable_Y_Centered();
 %Y_Linearly_Seperable_N_Centered();
-N_Linearly_Seperable_N_Centered();
+%N_Linearly_Seperable_N_Centered();
+
+x = [0 0; 
+     8 9];
+y = [-1;1];
+
+
+
+[margin, right, wrong, unknown, dk] = maxMarginOptimization_1_h(y,x);
 
 function Y_Linearly_Seperable_Y_Centered()
     %not linearly separable, centered at 0;
@@ -74,33 +83,29 @@ function N_Linearly_Seperable_N_Centered()
 end
 
 function Tests(x,y)
-    [margin, right, wrong, unknown] = maxMarginOptimization_1_h(y,x,0);
-    [margin, right, wrong, unknown] = maxMarginOptimization_1_s(y,x,0);
+    [margin, right, wrong, unknown] = maxMarginOptimization_1_h(y,x);
+    [margin, right, wrong, unknown] = maxMarginOptimization_1_s(y,x);
 
-    [margin, right, wrong, unknown] = maxMarginOptimization_2_h(y,x,0);
-    [margin, right, wrong, unknown] = maxMarginOptimization_2_s(y,x,0);
+    [margin, right, wrong, unknown] = maxMarginOptimization_2_h(y,x);
+    [margin, right, wrong, unknown] = maxMarginOptimization_2_s(y,x);
 
-    [margin, right, wrong, unknown] = maxMarginOptimization_3_s(y,x,0);    
+    [margin, right, wrong, unknown] = maxMarginOptimization_3_s(y,x);    
     
-    [margin, right, wrong, unknown] = maxMarginOptimization_4_s(y,x,0, kernel_poly(1));
-    [margin, right, wrong, unknown] = maxMarginOptimization_4_s(y,x,0, kernel_poly(2));
-    [margin, right, wrong, unknown] = maxMarginOptimization_4_s(y,x,0, kernel_poly(3));
-    [margin, right, wrong, unknown] = maxMarginOptimization_4_s(y,x,0, kernel_poly(10));
+    [margin, right, wrong, unknown] = maxMarginOptimization_4_s(y,x, k_polynomial(k_dot(),1,1));
+    [margin, right, wrong, unknown] = maxMarginOptimization_4_s(y,x, k_polynomial(k_dot(),2,1));
+    [margin, right, wrong, unknown] = maxMarginOptimization_4_s(y,x, k_polynomial(k_dot(),3,1));
+    [margin, right, wrong, unknown] = maxMarginOptimization_4_s(y,x, k_polynomial(k_dot(),10,1));
 end
 
 %Optimizers
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_1_h(y, x, verbosity)
+function [margin, right, wrong, unknown, dk] = maxMarginOptimization_1_h(y, x)
     f_cnt = size(x,1);
     o_cnt = size(x,2);
         
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables m w(f_cnt);
+        cvx_quiet(true);
+        variables m w(f_cnt) b0;
         maximize(m);
         subject to
             1 >= norm(w);
@@ -116,17 +121,13 @@ function [margin, right, wrong, unknown, dk] = maxMarginOptimization_1_h(y, x, v
     wrong   = sum(sign(ds) == -1);
     unknown = sum(sign(ds) == 0);
 end
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_1_s(y, x, verbosity)
+function [margin, right, wrong, unknown, dk] = maxMarginOptimization_1_s(y, x)
     f_cnt = size(x,1);
     o_cnt = size(x,2);
         
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
+        cvx_quiet(true);
         variables m w(f_cnt) z(o_cnt);
         maximize(m - sum(z)); %in this case z can easily grow much faster than m causing a tug of war
         subject to
@@ -144,17 +145,13 @@ function [margin, right, wrong, unknown, dk] = maxMarginOptimization_1_s(y, x, v
     wrong   = sum(sign(ds) == -1);
     unknown = sum(sign(ds) == 0);
 end
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_2_h(y, x, verbosity)
+function [margin, right, wrong, unknown, dk] = maxMarginOptimization_2_h(y, x)
     f_cnt = size(x,1);
     o_cnt = size(x,2);
     
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
+        cvx_quiet(true);
         variables w(f_cnt);
         minimize(norm(w));
         subject to
@@ -170,17 +167,13 @@ function [margin, right, wrong, unknown, dk] = maxMarginOptimization_2_h(y, x, v
     wrong   = sum(sign(ds) == -1);
     unknown = sum(sign(ds) == 0);
 end
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_2_s(y, x, verbosity)
+function [margin, right, wrong, unknown, dk] = maxMarginOptimization_2_s(y, x)
     f_cnt = size(x,1);
     o_cnt = size(x,2);
     
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
+        cvx_quiet(true);
         variables w(f_cnt) z(o_cnt);
         minimize(norm(w) + sum(z));
         subject to
@@ -197,17 +190,13 @@ function [margin, right, wrong, unknown, dk] = maxMarginOptimization_2_s(y, x, v
     wrong   = sum(sign(ds) == -1);
     unknown = sum(sign(ds) == 0);
 end
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_3_s(y, x, verbosity)
+function [margin, right, wrong, unknown, dk] = maxMarginOptimization_3_s(y, x)
     f_cnt = size(x,1);
     o_cnt = size(x,2);
 
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
+        cvx_quiet(true);
         variables w(f_cnt);
         minimize( sum(max(0,1-y.*x'*w)) + norm(w)) %hing-loss
     cvx_end
@@ -221,17 +210,13 @@ function [margin, right, wrong, unknown, dk] = maxMarginOptimization_3_s(y, x, v
     wrong   = sum(sign(ds) == -1);
     unknown = sum(sign(ds) == 0);
 end
-function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_s(y, x, verbosity, k)
+function [margin, right, wrong, unknown, dk] = maxMarginOptimization_4_s(y, x, k)
     f_cnt = size(x,1);
     o_cnt = size(x,2);
 
     warning('off','all')
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
+        cvx_quiet(true);
         variables a(o_cnt);
         maximize(sum(a) - 1/2*quad_form(a.*y, k(x,x))) %dual problem
         subject to
@@ -293,54 +278,14 @@ end
 %Drawers
 
 %Kernels
-function m = parse(x1, x2, k)
-    m = zeros(size(x1,1),size(x2,2));
-    
-    x1 = x1';
-    
-    for c = 1:size(x2,2)
-        for r = 1:size(x1,1)
-            m(r,c) = k(x1(r,:)', x2(:,c));
-        end
-    end
-end
-
 function m = K(x1, x2)
     p = 1;
+    c = 1;
     s = .1;
+ 
+    b = k_polynomial(k_dot,p,c);
     
-    m = parse(x1,x2, kernel_poly(p));
-    %m = parse(x1,x2, kernel_gaussian(s));
-    %m = parse(x1,x2, kernel_exponential(s));    
-    %m = parse(x1,x2, kernel_tanimoto_jaccard_coefficient());
-    %m = parse(x1,x2, kernel_sigmoid());
-end
-
-function k = kernel_poly(p)
-    
-    assert( p > 0, 'What are you doing!?');
-
-    if p == 1
-        k = @(x1,x2) x1'*x2;
-    else
-        k = @(x1,x2) power(x1'*x2 + ones(size(x1,2), size(x2,2)), p*ones(size(x1,2), size(x2,2)));
-    end
-end
-
-function k = kernel_sigmoid()
-    k = @(x1,x2) tanh(x1'*x2);
-end
-
-function k = kernel_exponential(s)
-    k = @(x1,x2) exp(-norm(x1-x2)/s);
-end
-
-function k = kernel_gaussian(s)
-    k = @(x1,x2) exp(- sum_square(x1-x2)/s);
-end
-
-function k = kernel_tanimoto_jaccard_coefficient()
-    k = @(x1,x2) (x1'*x2)/(x1'*x2 + sum(abs(x1-x2)));
+    m = b(x1,x2);
 end
 %Kernels
 
