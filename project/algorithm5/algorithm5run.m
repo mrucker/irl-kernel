@@ -44,11 +44,10 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     sE = sE/N;
     mE = F*sE;
 
-    draw(sE, nE);
+    %draw(sE, nE);
     
     % Generate random policy.
-    rand_w = rand(features,1);
-    rand_r = repmat(F'*rand_w, 1, actions);
+    rand_r = rand(states,1);
     rand_p = standardmdpsolve(mdp_data, rand_r);
     rand_s = standardmdpfrequency(mdp_data, rand_p);
     rand_m = F*rand_s;
@@ -69,18 +68,15 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
 
     i = 2;
 
-    r     = ff*(sE-sb{i-1});    
-    rs{i} = repmat(r,1,actions);
-    ps{i} = standardmdpsolve(mdp_data,rs{i});
+    rs{i} = ff*(sE-sb{i-1});
+    ps{i} = standardmdpsolve(mdp_data,repmat(rs{i},1,actions));
     ss{i} = standardmdpfrequency(mdp_data, ps{i});
     ms{i} = F*ss{i};
     
     tm{i} = norm(mE - mb{i-1});
     ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
-
-    rd = r'*(sE - ss{i});
     
-    fprintf(1,'Completed IRL iteration, i=%d, t=%f, rd=%f\n',i,ts{i},rd);
+    fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
     
     i = 3;
 
@@ -98,19 +94,16 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
         mb{i-1} = mb{i-2} + mc*(ms{i-1}-mb{i-2});
 
         % Recompute optimal policy using new weights.
-        r     = ff*(sE-sb{i-1});
-        rs{i} = repmat(r,1,actions);
-        ps{i} = standardmdpsolve(mdp_data,rs{i});
+        rs{i} = ff*(sE-sb{i-1});
+        ps{i} = standardmdpsolve(mdp_data,repmat(rs{i},1,actions));
         ss{i} = standardmdpfrequency(mdp_data, ps{i});
         ms{i} = F*ss{i};
         
         ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
         tm{i} = norm(mE - mb{i-1});
-        
-        rd = r'*(sE - ss{i});
 
         if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration, i=%d, t=%f, rd=%f\n',i,ts{i},rd);
+            fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
         end;
         
         if (abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon)
@@ -128,75 +121,42 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    %[~,idx] = max(mixPolicies_1(sE, ss, ff, rs, verbosity));
+    [~,idx] = max(mixPolicies_1(sE, ss, rs, ff));
     %[~,idx] = max(mixPolicies_2(mE, ms, ff, verbosity));
 
     time = toc;
     
     t  = ts{idx};
     r  = rs{idx};
-    rd = r(:,1)'*(sE - ss{idx});
     
     if verbosity ~= 0
-        fprintf(1,'FINISHED IRL,i=%d, t=%f, rd=%f\n',idx,t,rd);
+        fprintf(1,'FINISHED IRL,i=%d, t=%f \n',idx,t);
     end
     
-    irl_result = marshallResults(rs{idx}, 0, mdp_model, mdp_data, time);
+    irl_result = marshallResults(repmat(r, 1, actions), 0, mdp_model, mdp_data, time);
 end
 
-function [lambda] = mixPolicies_1(sE, ss, ff, rs, verbosity)
+function [lambda] = mixPolicies_1(sE, ss, rs, ff)
     s_mat = cell2mat(ss);
     r_mat = cell2mat(rs);
-    r_mat = r_mat(:,1:5:size(r_mat,2));
     
     f_cnt = size(s_mat,1);
     s_cnt = size(s_mat,2);
-
+        
     ssffss = s_mat'*ff*s_mat;
     seffse = sE'*ff*sE;
     seffss = sE'*ff*s_mat;
+     
+    %sd = diag(s_mat'*s_mat + sE'*sE - 2*s_mat'*sE); Didn't seem to work well
+    %fd = diag(ssffss + seffse - 2*seffss); Didn't seem to work well
+    %rd = diag(r_mat'*(sE - s_mat)); Didn't seem to work well
     
-    sd = diag(s_mat'*s_mat + sE'*sE - 2*s_mat'*sE).^(1/2);
-    fd = diag(ssffss + seffse - 2*seffss).^(1/2);
-    rd = abs(diag(r_mat'*(sE - s_mat)));
-
     % Solve optimization to determine lambda weights.
     cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
+        cvx_quiet(true);
         variables l(s_cnt);
         minimize(l'*ssffss*l + seffse - 2*seffss*l);
         subject to
-            l >= 0;
-            1 == sum(l);
-    cvx_end
-    
-    lambda = l;
-    %lambda = -sd;
-    %lambda = -fd;
-    %lambda = -rd;
-end
-
-function [lambda] = mixPolicies_2(mE, ms, ff, verbosity)
-    m_mat = cell2mat(ms);
-    
-    f_cnt = size(m_mat,1);
-    m_cnt = size(m_mat,2);
-    
-    % Solve optimization to determine lambda weights.
-    cvx_begin
-        if verbosity == 2
-            cvx_quiet(false);
-        else
-            cvx_quiet(true);
-        end
-        variables m(f_cnt) l(m_cnt);
-        minimize(norm(m-mE));
-        subject to
-            m == m_mat*l;
             l >= 0;
             1 == sum(l);
     cvx_end
@@ -258,16 +218,27 @@ end
 function k = k(x1, x2, params)
     p = params.p;
     s = params.s;
-    c = 1.1;
+    c = params.c;
     n = size(x1,1);
         
-    b = k_dot();
-    %b = k_polynomial(k_dot(),p,c);
-    %b = k_hamming(0);
-    %b = k_equal(k_norm());
-    %b = k_gaussian(k_norm(),s);
-    %b = k_exponential(k_norm(),s);
-    %b = k_anova(n);
-    
+    switch params.k
+        case 1
+            b = k_dot();
+        case 2
+            b = k_polynomial(k_hamming(1),p,c);
+        case 3
+            b = k_hamming();
+        case 4
+            b = k_equal(k_norm());
+        case 5
+            b = k_gaussian(k_hamming(0),s);
+        case 6
+            b = k_exponential(k_hamming(0),s);
+        case 7
+            b = k_anova(n);
+        case 8
+            b = k_exponential_compact(k_norm(),s);
+    end
+       
     k = b(x1,x2);
 end

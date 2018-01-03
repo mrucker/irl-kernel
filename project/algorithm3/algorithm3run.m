@@ -145,7 +145,7 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
         subject to
         %I don't understand it, but this constraint seems to make things worse. I ran about 20 tests with and without it to confirm.
         %It doesn't always make it worse, but when it does it results in a catastrophic failure.
-        %0 == a'*y; 
+            0 == a'*y;
             0 <= a;
     cvx_end
     warning('off','all')
@@ -155,7 +155,7 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
     
     %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
     b0 = mean(sl - sv'*ff*x*(a.*y)); %aka , -(a'*vv*(a.*y)/sum(a)); Doesn't seem to make a difference to performance
-    rs = ff*x*(a.*y);
+    rs = ff*x*(a.*y) + b0;
     
     %ds      = sign(y.*(vv*(a.*y) + b0));
     ds      = zeros(size(x,2),1);
@@ -267,11 +267,11 @@ function k = k(x1, x2, params)
         case 5
             b = k_gaussian(k_hamming(0),s);
         case 6
-            b = k_exponential(k_hamming(0),s);
+            b = k_exponential(k_norm(),s);
         case 7
             b = k_anova(n);
     end
-    
+       
     k = b(x1,x2);
 end
 %Kernels
