@@ -42,7 +42,6 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
 
     nE = nE/N;
     sE = sE/N;
-    mE = F*sE;
 
     %draw(sE, nE);
     
@@ -50,30 +49,22 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     rand_r = rand(states,1);
     rand_p = standardmdpsolve(mdp_data, rand_r);
     rand_s = standardmdpfrequency(mdp_data, rand_p);
-    rand_m = F*rand_s;
     
     % Initialize t.
     rs = {rand_r};
     ps = {rand_p};
     ss = {rand_s};
-    ms = {rand_m};
-    sb = {rand_s};
-    mb = {rand_m};
+    sb = {rand_s};   
     
     ts = {0};
-    tm = {0};
 
     ff = k(F,F, algorithm_params);
-    ff = ff./ff(1,1);
 
     i = 2;
 
     rs{i} = ff*(sE-sb{i-1});
     ps{i} = standardmdpsolve(mdp_data,repmat(rs{i},1,actions));
-    ss{i} = standardmdpfrequency(mdp_data, ps{i});
-    ms{i} = F*ss{i};
-    
-    tm{i} = norm(mE - mb{i-1});
+    ss{i} = standardmdpfrequency(mdp_data, ps{i});    
     ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
     
     fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
@@ -88,19 +79,11 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
         sc      = sn/sd;
         sb{i-1} = sb{i-2} + sc*(ss{i-1}-sb{i-2});
         
-        mn     = (ms{i-1}-mb{i-2})'*(mE-mb{i-2});
-        md     = (ms{i-1}-mb{i-2})'*(ms{i-1}-mb{i-2});
-        mc      = mn/md;
-        mb{i-1} = mb{i-2} + mc*(ms{i-1}-mb{i-2});
-
         % Recompute optimal policy using new weights.
         rs{i} = ff*(sE-sb{i-1});
         ps{i} = standardmdpsolve(mdp_data,repmat(rs{i},1,actions));
-        ss{i} = standardmdpfrequency(mdp_data, ps{i});
-        ms{i} = F*ss{i};
-        
+        ss{i} = standardmdpfrequency(mdp_data, ps{i});        
         ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
-        tm{i} = norm(mE - mb{i-1});
 
         if verbosity ~= 0
             fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});

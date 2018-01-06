@@ -144,18 +144,20 @@ function [margin, right, wrong, unknown, reward] = maxMarginOptimization_4_s(y, 
         maximize(sum(a) - 1/2*quad_form(a.*y, vv)) %dual problem
         subject to
         %I don't understand it, but this constraint seems to make things worse. I ran about 20 tests with and without it to confirm.
-        %It doesn't always make it worse, but when it does it results in a catastrophic failure.
+        %It doesn't always make it worse, but when it does it results in a catastrophic failure. 
+        %Scratch that. With enough data it makes things better. It seems to somehow be tied into the bias        
             0 == a'*y;
             0 <= a;
     cvx_end
     warning('off','all')
     
-    sv = x(:,round(a,8)>0);
-    sl = y(round(a,8)>0,1);
+    %sv = x(:,round(a,8)>0);
+    %sl = y(round(a,8)>0,1);
     
     %regarding b0: "we typically use an average of all the solutions for numerical stability" (ESL pg.421)
-    b0 = mean(sl - sv'*ff*x*(a.*y)); %aka , -(a'*vv*(a.*y)/sum(a)); Doesn't seem to make a difference to performance
-    rs = ff*x*(a.*y) + b0;
+    %b0 = mean(sl - sv'*ff*x*(a.*y)); %aka , -(a'*vv*(a.*y)/sum(a)); Doesn't seem to make a difference to performance
+    %rs = ff*x*(a.*y) + b0; including b0 in reward calculation doesn't seem to make a demonstrable difference
+    rs = ff*x*(a.*y);
     
     %ds      = sign(y.*(vv*(a.*y) + b0));
     ds      = zeros(size(x,2),1);
