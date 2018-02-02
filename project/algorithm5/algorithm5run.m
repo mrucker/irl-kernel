@@ -214,7 +214,7 @@ function k = k(x1, x2, params)
         case 4
             b = k_equal(k_norm());
         case 5
-            b = k_gaussian(k_hamming(0),s);
+            b = k_gaussian(k_norm(),s);
         case 6
             b = k_exponential(k_hamming(0),s);
         case 7
