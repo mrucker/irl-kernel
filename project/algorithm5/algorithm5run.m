@@ -1,6 +1,7 @@
 % Abbeel & Ng algorithm implementation (projection version).
 function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_data,example_samples,true_features,verbosity)
 
+    fprintf(1,'Start of Algorithm5 \n');
     % Fill in default parameters.
     algorithm_params = algorithm5defaultparams(algorithm_params);
 
@@ -9,7 +10,11 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
         rng(algorithm_params.seed);
     end
 
-    tic;
+    exp_time = 0;
+    krn_time = 0;
+    svm_time = 0;
+    mdp_time = 0;
+    mix_time = 0;
 
     % Initialize variables.
     [states,actions,~] = size(mdp_data.sa_p);
@@ -33,13 +38,15 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     nE = zeros(states,1);
     sE = zeros(states,1);
 
+    tic;
     for i=1:N
         for t=1:T
             nE(example_samples{i,t}(1)) = nE(example_samples{i,t}(1)) + 1;
             sE(example_samples{i,t}(1)) = sE(example_samples{i,t}(1)) + 1*mdp_data.discount^(t-1);
         end
     end
-
+    exp_time = toc;
+    
     nE = nE/N;
     sE = sE/N;
 
@@ -47,8 +54,11 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     
     % Generate random policy.
     rand_r = rand(states,1);
+    
+    tic;
     rand_p = standardmdpsolve(mdp_data, rand_r);
     rand_s = standardmdpfrequency(mdp_data, rand_p);
+    mdp_time = mdp_time + toc;
     
     % Initialize t.
     rs = {rand_r};
@@ -57,32 +67,42 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     sb = {rand_s};   
     
     ts = {0};
-
+    
+    tic;
     ff = k(F,F, algorithm_params);
+    krn_time = toc;
 
-    i = 2;
-
+    i = 2;    
+    
+    tic;
     rs{i} = ff*(sE-sb{i-1});
     ps{i} = standardmdpsolve(mdp_data,repmat(rs{i},1,actions));
     ss{i} = standardmdpfrequency(mdp_data, ps{i});    
+    mdp_time = mdp_time + toc;
+    
     ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
     
     fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
     
     i = 3;
-
+    
     while 1
 
         % Compute t and w using projection.
+        tic;
         sn     = (ss{i-1}-sb{i-2})'*ff*(sE-sb{i-2});
         sd     = (ss{i-1}-sb{i-2})'*ff*(ss{i-1}-sb{i-2});
         sc      = sn/sd;
         sb{i-1} = sb{i-2} + sc*(ss{i-1}-sb{i-2});
+        svm_time = svm_time + toc;
         
-        % Recompute optimal policy using new weights.
+        % Recompute optimal policy using new weights.        
+        tic;
         rs{i} = ff*(sE-sb{i-1});
         ps{i} = standardmdpsolve(mdp_data,repmat(rs{i},1,actions));
         ss{i} = standardmdpfrequency(mdp_data, ps{i});        
+        mdp_time = mdp_time + toc;
+        
         ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
 
         if verbosity ~= 0
@@ -104,28 +124,33 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     % a stochastic policy. However, here we are evaluating IRL algorithms, so
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
-    [~,idx] = max(mixPolicies_1(sE, ss, rs, ff));
-    %[~,idx] = max(mixPolicies_2(mE, ms, ff, verbosity));
-
-    time = toc;
+    tic;
+    [~,idx] = max(mixPolicies(sE, ss, rs, ff));
+    mix_time = mix_time + toc;
     
     t  = ts{idx};
     r  = rs{idx};
     
     if verbosity ~= 0
         fprintf(1,'FINISHED IRL,i=%d, t=%f \n',idx,t);
-    end
+    end    
     
-    irl_result = marshallResults(repmat(r, 1, actions), 0, mdp_model, mdp_data, time);
+    fprintf(1,'exp_time=%f \n',exp_time);
+    fprintf(1,'krn_time=%f \n',krn_time);
+    fprintf(1,'svm_time=%f \n',svm_time);
+    fprintf(1,'mdp_time=%f \n',mdp_time);
+    fprintf(1,'mix_time=%f \n',mix_time);
+
+    irl_result = marshallResults(repmat(r, 1, actions), 0, mdp_model, mdp_data, exp_time + krn_time + svm_time + mdp_time + mix_time);
 end
 
-function [lambda] = mixPolicies_1(sE, ss, rs, ff)
+function [lambda] = mixPolicies(sE, ss, rs, ff)
     s_mat = cell2mat(ss);
     r_mat = cell2mat(rs);
-    
+
     f_cnt = size(s_mat,1);
     s_cnt = size(s_mat,2);
-        
+
     ssffss = s_mat'*ff*s_mat;
     seffse = sE'*ff*sE;
     seffss = sE'*ff*s_mat;
@@ -210,7 +235,7 @@ function k = k(x1, x2, params)
         case 2
             b = k_polynomial(k_hamming(1),p,c);
         case 3
-            b = k_hamming();
+            b = k_hamming(0);
         case 4
             b = k_equal(k_norm());
         case 5

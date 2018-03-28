@@ -76,6 +76,7 @@ function irl_result = algorithm3run(algorithm_params, mdp_data, mdp_model, featu
 
     i = 2;
     
+    
     ff = k(F,F, algorithm_params);    
     
     while 1
