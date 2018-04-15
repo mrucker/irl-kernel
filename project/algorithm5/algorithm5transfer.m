@@ -1,5 +1,5 @@
 % Transfer learned reward function to a new state space.
-function irl_result = antransfer(prev_result,mdp_data,mdp_model,...
+function irl_result = algorithm5transfer(prev_result,mdp_data,mdp_model,...
     feature_data,true_feature_map,verbosity)
 
 % Get weigths.
