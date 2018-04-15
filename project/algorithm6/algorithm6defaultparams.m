@@ -1,5 +1,5 @@
 % Fill in default parameters for the Abbeel & Ng algorithm.
-function algorithm_params = algorithm5defaultparams(algorithm_params)
+function algorithm_params = algorithm6defaultparams(algorithm_params)
 
 % Create default parameters.
 default_params = struct(...

@@ -8,3 +8,4 @@ addpath('algorithm2');
 addpath('algorithm3');
 addpath('algorithm4');
 addpath('algorithm5');
+addpath('algorithm6');
