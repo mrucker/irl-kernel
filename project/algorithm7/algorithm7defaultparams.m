@@ -1,5 +1,5 @@
-% Fill in default parameters for the MMP algorithm.
-function algorithm_params = mmpdefaultparams(algorithm_params)
+% Fill in default parameters for the Abbeel & Ng algorithm.
+function algorithm_params = algorithm7defaultparams(algorithm_params)
 
 % Create default parameters.
 default_params = struct(...

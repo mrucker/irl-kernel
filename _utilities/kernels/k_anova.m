@@ -9,7 +9,7 @@ function k = r_anova(x1, x2, d)
     if(n == d)
         k = prod(double(x1 == x2) + 1);
         return;
-    end
+   end
     
     n = n+1; %to account for n=0;
     d = d+1; %to account for d=0;

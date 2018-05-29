@@ -1,9 +1,9 @@
 % Abbeel & Ng algorithm implementation (projection version).
-function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_data,example_samples,true_features,verbosity)
+function irl_result = algorithm7run(algorithm_params,mdp_data,mdp_model,feature_data,example_samples,true_features,verbosity)
 
-    fprintf(1,'Start of Algorithm5 \n');
+    fprintf(1,'Start of Algorithm7 \n');
     % Fill in default parameters.
-    algorithm_params = algorithm5defaultparams(algorithm_params);
+    algorithm_params = algorithm7defaultparams(algorithm_params);
 
     % Set random seed.
     if algorithm_params.seed ~= 0
@@ -50,15 +50,16 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     nE = nE/N;
     sE = sE/N;
 
+    N = 5000; 
+    
     %draw(sE, nE);
     
     % Generate random policy.
     rand_r = rand(states,1);
-    rand_r = rand_r - min(rand_r);
     
-    tic;
-    rand_p = standardmdpsolve(mdp_data, rand_r);
-    rand_s = standardmdpfrequency(mdp_data, rand_p);
+    tic;    
+    rand_p = solve(mdp_data, rand_r);
+    rand_s = count(mdp_data, rand_p, N, T);
     mdp_time = mdp_time + toc;
     
     % Initialize t.
@@ -70,32 +71,33 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     ts = {0};
     
     tic;
+    true_p = standardmdpsolve(mdp_data,algorithm_params.true_r);
+    vf = value_features(mdp_data, true_p.p);
+    vf = vf./sum(vf);
+    ff = k(F*vf,F*vf, algorithm_params);    
     ff = k(F,F, algorithm_params);
+    %ff = vf'*ff*vf;
     krn_time = toc;
 
-    i = 2;
+    i = 2;    
+    
+    tic;
+        
+    rs{i} = ff*(sE-sb{i-1});
+    ps{i} = solve(mdp_data, rs{i});
+    ss{i} = count(mdp_data, ps{i}, N, T);
+    mdp_time = mdp_time + toc;
+    
+    ts{i} = norm(sE - sb{i-1}); 
+    %ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
+    
+    fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
+    
+    i = 3;
     
     while 1
 
-        tic;
-        rs{i} = ff*(sE-sb{i-1});
-        rs{i} = rs{i} - min(rs{i});
-        ps{i} = standardmdpsolve(mdp_data,repmat(rs{i},1,actions));
-        ss{i} = standardmdpfrequency(mdp_data, ps{i});        
-        mdp_time = mdp_time + toc;
-        
-        ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
-
-        if verbosity ~= 0
-            fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
-        end;
-        
-        if (abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon)
-            break;
-        end;
-
-        i = i + 1;
-
+        % Compute t and w using projection.
         tic;
         sn       = (ss{i-1}-sb{i-2})'*ff*(sE-sb{i-2});
         sd       = (ss{i-1}-sb{i-2})'*ff*(ss{i-1}-sb{i-2});
@@ -103,7 +105,33 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
         sb{i-1}  = sb{i-2} + sc*(ss{i-1}-sb{i-2});
         svm_time = svm_time + toc;
 
+        % Recompute optimal policy using new weights.        
+        tic;
+        rs{i} = ff*(sE-sb{i-1});
+        ps{i} = solve(mdp_data, rs{i});
+        ss{i} = count(mdp_data, ps{i}, N, T);
+
+        mdp_time = mdp_time + toc;
+
+        ts{i} = norm(sE - sb{i-1});        
+
+        if verbosity ~= 0
+            fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
+        end;
+        
+        if abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon
+            break;
+        end;
+        
+        if i == 500
+            break;
+        end
+
+        i = i + 1;
+
     end;
+
+    idx = i;
     
     % Solve optimization to determine lambda weights.
     % In Abbeel & Ng's algorithm, we should use the weights lambda to construct
@@ -111,12 +139,13 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
     tic;
-    [~,idx] = max(mixPolicies(sE, ss, rs, ff));
+    [~,idx] = max(mixPolicies(sE, ss));
     mix_time = mix_time + toc;
     
     t  = ts{idx};
     r  = rs{idx};
-    
+    p  = ps{idx};
+
     if verbosity ~= 0
         fprintf(1,'FINISHED IRL,i=%d, t=%f \n',idx,t);
     end    
@@ -127,46 +156,22 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     fprintf(1,'mdp_time=%f \n',mdp_time);
     fprintf(1,'mix_time=%f \n',mix_time);
 
-    irl_result = marshallResults(repmat(r, 1, actions), 0, mdp_model, mdp_data, exp_time + krn_time + svm_time + mdp_time + mix_time);
+    irl_result = marshallResults(repmat(r, 1, actions), p, 0, mdp_model, mdp_data, exp_time + krn_time + svm_time + mdp_time + mix_time);
 end
 
-function [lambda] = mixPolicies(sE, ss, rs, ff)
-    s_mat = cell2mat(ss);
-    r_mat = cell2mat(rs);
-
-    f_cnt = size(s_mat,1);
-    s_cnt = size(s_mat,2);
-
-    ssffss = s_mat'*ff*s_mat;
-    seffse = sE'*ff*sE;
-    seffss = sE'*ff*s_mat;
-     
-    %sd = diag(s_mat'*s_mat + sE'*sE - 2*s_mat'*sE); Didn't seem to work well
-    %fd = diag(ssffss + seffse - 2*seffss); Didn't seem to work well
-    %rd = diag(r_mat'*(sE - s_mat)); Didn't seem to work well
-    
-    % Solve optimization to determine lambda weights.
-    cvx_begin
-        cvx_quiet(true);
-        variables l(s_cnt);
-        minimize(l'*ssffss*l + seffse - 2*seffss*l);
-        subject to
-            l >= 0;
-            1 == sum(l);
-    cvx_end
-    
-    lambda = l;
+function [lambda] = mixPolicies(sE, ss)
+    s_diff = cell2mat(ss) - sE;    
+    lambda = -diag((s_diff)'*(s_diff));
 end
 
-function irl_result = marshallResults(r, w, mdp_model, mdp_data, time)
+function irl_result = marshallResults(r, p, w, mdp_model, mdp_data, time)
     
     mdp_solve = str2func(strcat(mdp_model,'solve'));
     
     % Compute policies.
-    soln = mdp_solve(mdp_data, r);    
-    v = soln.v;
-    q = soln.q;
-    p = soln.p;
+    t = r(:,1);
+    v = r;
+    q = sum(mdp_data.sa_p.*t(mdp_data.sa_s),3);
 
     r_itr      = cell(1,1);
     tree_r_itr = cell(1,1);
@@ -235,4 +240,62 @@ function k = k(x1, x2, params)
     end
        
     k = b(x1,x2);
+end
+
+function p = solve(mdp_data, v)
+    q = sum(mdp_data.sa_p.*v(mdp_data.sa_s),3);
+    [~,p] = max(q,[],2);
+end
+
+function c = count(mdp_data, p, trials, steps)
+
+        % I don't understand how this works but it gives the same results as if
+        % you calculated the discounted power series of the transition matrix [i.e. (eye(states) - gamma*transition)^(-1)] 
+        % and then multiplied it by the starting state distribution (e.g., a 2x2 gridworld with equal starts is [.25;.25;.25;.25])
+        %
+    c = standardmdpfrequency(mdp_data, struct('p',p));
+        
+        % A monte carlo approach to reaching the above calculations. Even for small state spaces (e.g. 100) this has high variance.
+    %c = monte(mdp_data, p, trials, steps);
+end
+
+function vf = value_features(mdp_data, p)
+    s_cnt = size(mdp_data.sa_p, 1);
+    
+    vf = (eye(s_cnt) - mdp_data.discount*trans(mdp_data,p))^(-1);
+end
+
+function t = trans(mdp_data, p)
+    s_cnt = size(mdp_data.sa_p, 1);
+    a_cnt = size(mdp_data.sa_p, 2);
+    
+    transitions = zeros(s_cnt, s_cnt);    
+   
+    for s = 1:s_cnt
+        %mdp_data.sa_p(s, p(s), 1) %given we are in state s, attempt action p(s), what is the probability we actually take action 1 instead?
+        %mdp_data.sa_s(s, p(s), 1) %given we are in state s, attempt action p(s), what state do we end up in if we actually take action 1?
+        
+        for a = 1:a_cnt
+            transitions(mdp_data.sa_s(s,p(s),a), s) = transitions(mdp_data.sa_s(s,p(s),a), s) + mdp_data.sa_p(s, p(s), a);
+        end
+        
+    end
+    
+    t = transitions;
+end
+
+function m = monte(mdp_data, p, trials, steps)
+
+    state_cnt = size(mdp_data.sa_p, 1);
+    state_frq = zeros(state_cnt,1);
+    
+    for j=1:trials
+        state = floor(rand() * state_cnt) + 1;
+        for i=1:steps
+            state_frq(state) = state_frq(state) + 1;
+            state = mdp_data.sa_s(state, 1, p(state));
+        end
+    end
+    
+    m = state_frq / trials;
 end

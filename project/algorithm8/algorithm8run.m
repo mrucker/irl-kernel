@@ -1,9 +1,9 @@
 % Abbeel & Ng algorithm implementation (projection version).
-function irl_result = algorithm6run(algorithm_params,mdp_data,mdp_model,feature_data,example_samples,true_features,verbosity)
+function irl_result = algorithm8run(algorithm_params,mdp_data,mdp_model,feature_data,example_samples,true_features,verbosity)
 
-    fprintf(1,'Start of Algorithm6 \n');
+    fprintf(1,'Start of Algorithm7 \n');
     % Fill in default parameters.
-    algorithm_params = algorithm6defaultparams(algorithm_params);
+    algorithm_params = algorithm7defaultparams(algorithm_params);
 
     % Set random seed.
     if algorithm_params.seed ~= 0
@@ -77,13 +77,15 @@ function irl_result = algorithm6run(algorithm_params,mdp_data,mdp_model,feature_
     i = 2;    
     
     tic;
+    
     rs{i} = ff*(sE-sb{i-1});
+    ps{i} = solve(mdp_data, rs{i});
+    rs{i} = step(mdp_data, ps{i}, rs{i});
     ps{i} = solve(mdp_data, rs{i});
     ss{i} = count(mdp_data, ps{i}, N, T);
     mdp_time = mdp_time + toc;
     
     ts{i} = norm(sE - sb{i-1}); 
-    %ts{i} = sqrt(sE'*ff*sE + sb{i-1}'*ff*sb{i-1} - 2*sE'*ff*sb{i-1});
     
     fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
     
@@ -103,6 +105,8 @@ function irl_result = algorithm6run(algorithm_params,mdp_data,mdp_model,feature_
         tic;
         rs{i} = ff*(sE-sb{i-1});
         ps{i} = solve(mdp_data, rs{i});
+        rs{i} = step(mdp_data, ps{i}, rs{i});
+        ps{i} = solve(mdp_data, rs{i});
         ss{i} = count(mdp_data, ps{i}, N, T);
         mdp_time = mdp_time + toc;
 
@@ -112,7 +116,7 @@ function irl_result = algorithm6run(algorithm_params,mdp_data,mdp_model,feature_
             fprintf(1,'Completed IRL iteration, i=%d, t=%f\n',i,ts{i});
         end;
         
-        if (abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon)
+        if abs(ts{i}-ts{i-1}) <= algorithm_params.epsilon
             break;
         end;
         
@@ -138,7 +142,7 @@ function irl_result = algorithm6run(algorithm_params,mdp_data,mdp_model,feature_
     t  = ts{idx};
     r  = rs{idx};
     p  = ps{idx};
-    
+
     if verbosity ~= 0
         fprintf(1,'FINISHED IRL,i=%d, t=%f \n',idx,t);
     end    
@@ -252,9 +256,51 @@ function c = count(mdp_data, p, trials, steps)
     %c = monte(mdp_data, p, trials, steps);
 end
 
+function vf = value_features(mdp_data, p)
+    s_cnt = size(mdp_data.sa_p, 1);
+    
+    vf = (eye(s_cnt) - mdp_data.discount*trans(mdp_data,p))^(-1);
+end
+
+function v = step(mdp_data, p, old_v)
+
+    s_cnt = size(mdp_data.sa_p, 1);
+    
+    new_v = old_v;
+    
+    for s = 1:s_cnt
+        if p(s) == 1
+            new_v(s) = old_v(mdp_data.sa_s(s, p(s), p(s)));
+        else
+            new_v(s) = mdp_data.discount * old_v(mdp_data.sa_s(s, p(s), p(s)));
+        end
+    end
+
+    v = new_v;
+end
+
+function t = trans(mdp_data, p)
+    s_cnt = size(mdp_data.sa_p, 1);
+    a_cnt = size(mdp_data.sa_p, 2);
+    
+    transitions = zeros(s_cnt, s_cnt);    
+   
+    for s = 1:s_cnt
+        %mdp_data.sa_p(s, p(s), 1) %given we are in state s, attempt action p(s), what is the probability we actually take action 1 instead?
+        %mdp_data.sa_s(s, p(s), 1) %given we are in state s, attempt action p(s), what state do we end up in if we actually take action 1?
+        
+        for a = 1:a_cnt
+            transitions(mdp_data.sa_s(s,p(s),a), s) = transitions(mdp_data.sa_s(s,p(s),a), s) + mdp_data.sa_p(s, p(s), a);
+        end
+        
+    end
+    
+    t = transitions;
+end
+
 function m = monte(mdp_data, p, trials, steps)
 
-    state_cnt = size(mdp_data.sa_p, 1);    
+    state_cnt = size(mdp_data.sa_p, 1);
     state_frq = zeros(state_cnt,1);
     
     for j=1:trials
