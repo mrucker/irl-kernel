@@ -111,7 +111,9 @@ function irl_result = algorithm5run(algorithm_params,mdp_data,mdp_model,feature_
     % we must return a single reward. To this end, we'll simply pick the reward
     % with the largest weight lambda.
     tic;
-    [~,idx] = max(mixPolicies(sE, ss, rs, ff));
+    
+    [~,idx] = min(sqdist(sE,cell2mat(ss)));
+    %[~,idx] = max(mixPolicies(sE, ss, rs, ff));
     mix_time = mix_time + toc;
     
     t  = ts{idx};
